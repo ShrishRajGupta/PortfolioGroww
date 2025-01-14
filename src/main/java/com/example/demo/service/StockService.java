@@ -36,4 +36,26 @@ public class StockService {
             throw new RuntimeException("Failed to process CSV", e);
         }
     }
+    public void updateStocksFromCsv(MultipartFile file) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] fields = line.split(",");
+
+                if (fields.length >= 6) {
+                    Stock stock = new Stock();
+                    stock.setName(fields[0].trim());
+                    stock.setOpenPrice(Double.parseDouble(fields[1].trim()));
+                    stock.setClosePrice(Double.parseDouble(fields[2].trim()));
+                    stock.setHighPrice(Double.parseDouble(fields[3].trim()));
+                    stock.setLowPrice(Double.parseDouble(fields[4].trim()));
+                    stock.setSettlementPrice(Double.parseDouble(fields[5].trim()));
+
+                    stockRepository.save(stock);
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to process CSV file", e);
+        }
+    }
 }
