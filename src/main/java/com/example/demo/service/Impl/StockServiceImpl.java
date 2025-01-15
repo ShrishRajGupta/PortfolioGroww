@@ -4,6 +4,8 @@ import com.example.demo.dto.*;
 import com.example.demo.entity.*;
 import com.example.demo.repository.*;
 import com.example.demo.service.StockService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,10 +16,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 @Service
+@Slf4j
+@RequiredArgsConstructor
 public class StockServiceImpl implements StockService {
 
     @Autowired
-    private StockRepository stockRepository;
+    private final StockRepository stockRepository;
 
     @Override
     public void processCsv(MultipartFile file) {

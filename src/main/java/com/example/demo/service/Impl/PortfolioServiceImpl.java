@@ -4,6 +4,8 @@ import com.example.demo.dto.*;
 import com.example.demo.entity.*;
 import com.example.demo.repository.*;
 import com.example.demo.service.PortfolioService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -12,13 +14,15 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
+@Slf4j
+@RequiredArgsConstructor
 public class PortfolioServiceImpl implements PortfolioService {
 
     @Autowired
-    private TradeRepository tradeRepository;
+    private final TradeRepository tradeRepository;
 
     @Autowired
-    private StockRepository stockRepository;
+    private final StockRepository stockRepository;
 
     @Override
     public PortfolioResponseDTO getPortfolio(Long userId) {

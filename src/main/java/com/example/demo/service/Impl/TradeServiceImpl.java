@@ -5,21 +5,25 @@ import com.example.demo.dto.*;
 import com.example.demo.entity.*;
         import com.example.demo.repository.*;
 import com.example.demo.service.TradeService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.util.Optional;
 
 @Service
+@Slf4j
+@RequiredArgsConstructor
 public class TradeServiceImpl implements TradeService {
 
     @Autowired
-    private TradeRepository tradeRepository;
+    private final TradeRepository tradeRepository;
 
     @Autowired
-    private StockRepository stockRepository;
+    private final StockRepository stockRepository;
 
     @Autowired
-    private UserAccountRepository userAccountRepository;
+    private final UserAccountRepository userAccountRepository;
 
     @Override
     public TradeResponseDTO recordTrade(TradeRequestDTO tradeRequest) {
