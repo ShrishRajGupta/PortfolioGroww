@@ -1,51 +1,50 @@
-Stock ID,Stock Name,Open Price,Close Price,High Price,Low Price,Settlement Price
-1,Apple Inc.,145.00,148.20,150.00,143.50,147.80
-2,Tesla Inc.,654.00,668.50,680.00,650.00,665.50
-3,Microsoft Corp.,290.00,295.50,300.00,285.00,294.80
-4,Amazon.com Inc.,3350.00,3400.00,3450.00,3300.00,3385.00
-5,Alphabet Inc. (GOOGL),2730.00,2785.00,2800.00,2700.00,2770.50
-6,Meta Platforms Inc. (FB),355.00,360.00,365.00,350.00,358.00
-7,NVIDIA Corp.,225.00,230.00,235.00,220.00,228.50
-8,Adobe Inc.,570.00,575.50,580.00,560.00,572.00
-9,Intel Corporation,50.00,52.20,55.00,49.50,51.80
-10,Netflix Inc.,540.00,545.00,550.00,530.00,540.50
-11,Twitter Inc.,65.00,70.00,72.00,63.50,69.20
-12,Salesforce.com Inc.,230.00,233.50,240.00,225.00,232.00
-13,Berkshire Hathaway Inc.,420000.00,425000.00,430000.00,415000.00,423000.00
-14,Johnson & Johnson,170.00,175.50,180.00,167.00,174.80
-15,Procter & Gamble Co.,135.00,137.50,140.00,130.00,136.00
-16,Coca-Cola Co.,55.00,56.20,58.00,54.00,55.80
-17,ExxonMobil Corp.,70.00,72.50,75.00,68.00,72.00
-18,Walmart Inc.,140.00,145.00,148.00,135.00,143.50
-19,PepsiCo Inc.,160.00,162.50,165.00,158.00,161.80
-20,The Home Depot Inc.,330.00,335.00,340.00,320.00,332.50
-21,Target Corporation,215.00,220.00,225.00,210.00,218.50
-22,McDonald's Corp.,235.00,240.00,245.00,230.00,237.50
-23,Visa Inc.,230.00,233.00,238.00,225.00,231.80
-24,Mastercard Inc.,350.00,355.00,360.00,340.00,350.50
-25,Caterpillar Inc.,220.00,225.00,230.00,215.00,223.00
-26,Bristol-Myers Squibb Co.,60.00,61.50,62.00,59.00,60.80
-27,The Walt Disney Co.,180.00,185.00,190.00,175.00,182.50
-28,Lockheed Martin Corp.,375.00,380.00,385.00,370.00,378.50
-29,AbbVie Inc.,160.00,165.00,170.00,158.00,163.50
-30,IBM Corporation,130.00,132.00,135.00,128.00,131.50
-31,Verizon Communications Inc.,55.00,56.50,58.00,53.50,55.80
-32,Chevron Corp.,120.00,122.50,125.00,118.00,121.00
-33,Philip Morris International Inc.,85.00,87.50,90.00,83.00,86.50
-34,3M Company,170.00,172.50,175.00,165.00,171.00
-35,American Express Company,180.00,185.00,190.00,175.00,182.00
-36,Goldman Sachs Group,350.00,355.00,360.00,340.00,350.50
-37,JPMorgan Chase & Co.,145.00,150.00,155.00,140.00,148.00
-38,UnitedHealth Group,450.00,455.00,460.00,440.00,452.00
-39,Abbott Laboratories,110.00,112.00,115.00,105.00,111.50
-40,S&P Global Inc.,380.00,385.00,390.00,375.00,383.50
-41,Nike Inc.,145.00,148.00,150.00,140.00,146.50
-42,PepsiCo Inc.,160.00,162.00,165.00,158.50,161.20
-43,Starbucks Corp.,115.00,120.00,125.00,110.00,118.50
-44,Chevron Corporation,120.00,122.00,125.00,118.50,121.20
-45,Costco Wholesale,400.00,405.00,410.00,395.00,402.50
-46,Home Depot,315.00,320.00,325.00,310.00,318.50
-47,Disney,170.00,172.00,175.00,165.00,171.50
-48,American Airlines Group,18.00,19.00,20.00,17.50,18.70
-49,General Motors Co.,50.00,52.00,55.00,48.00,51.80
-50,AT&T Inc.,28.00,30.00,32.00,27.00,29.50
+Apple Inc.,145,148.2,150,143.5,147.8
+Tesla Inc.,654,668.5,680,650,665.5
+Microsoft Corp.,290,295.5,300,285,294.8
+Amazon.com Inc.,3350,3400,3450,3300,3385
+Alphabet Inc. (GOOGL),2730,2785,2800,2700,2770.5
+Meta Platforms Inc. (FB),355,360,365,350,358
+NVIDIA Corp.,225,230,235,220,228.5
+Adobe Inc.,570,575.5,580,560,572
+Intel Corporation,50,52.2,55,49.5,51.8
+Netflix Inc.,540,545,550,530,540.5
+Twitter Inc.,65,70,72,63.5,69.2
+Salesforce.com Inc.,230,233.5,240,225,232
+Berkshire Hathaway Inc.,420000,425000,430000,415000,423000
+Johnson & Johnson,170,175.5,180,167,174.8
+Procter & Gamble Co.,135,137.5,140,130,136
+Coca-Cola Co.,55,56.2,58,54,55.8
+ExxonMobil Corp.,70,72.5,75,68,72
+Walmart Inc.,140,145,148,135,143.5
+PepsiCo Inc.,160,162.5,165,158,161.8
+The Home Depot Inc.,330,335,340,320,332.5
+Target Corporation,215,220,225,210,218.5
+McDonald's Corp.,235,240,245,230,237.5
+Visa Inc.,230,233,238,225,231.8
+Mastercard Inc.,350,355,360,340,350.5
+Caterpillar Inc.,220,225,230,215,223
+Bristol-Myers Squibb Co.,60,61.5,62,59,60.8
+The Walt Disney Co.,180,185,190,175,182.5
+Lockheed Martin Corp.,375,380,385,370,378.5
+AbbVie Inc.,160,165,170,158,163.5
+IBM Corporation,130,132,135,128,131.5
+Verizon Communications Inc.,55,56.5,58,53.5,55.8
+Chevron Corp.,120,122.5,125,118,121
+Philip Morris International Inc.,85,87.5,90,83,86.5
+3M Company,170,172.5,175,165,171
+American Express Company,180,185,190,175,182
+Goldman Sachs Group,350,355,360,340,350.5
+JPMorgan Chase & Co.,145,150,155,140,148
+UnitedHealth Group,450,455,460,440,452
+Abbott Laboratories,110,112,115,105,111.5
+S&P Global Inc.,380,385,390,375,383.5
+Nike Inc.,145,148,150,140,146.5
+PepsiCo Inc.,160,162,165,158.5,161.2
+Starbucks Corp.,115,120,125,110,118.5
+Chevron Corporation,120,122,125,118.5,121.2
+Costco Wholesale,400,405,410,395,402.5
+Home Depot,315,320,325,310,318.5
+Disney,170,172,175,165,171.5
+American Airlines Group,18,19,20,17.5,18.7
+General Motors Co.,50,52,55,48,51.8
+AT&T Inc.,28,30,32,27,29.5

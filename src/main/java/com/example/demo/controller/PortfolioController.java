@@ -2,13 +2,22 @@ package com.example.demo.controller;
 
 
 import com.example.demo.dto.*;
+import com.example.demo.entity.Stock;
+import com.example.demo.repository.StockRepository;
 import com.example.demo.service.*;
+import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.annotation.Before;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Optional;
+
+@Controller
+@RequiredArgsConstructor
 @RestController
 @RequestMapping("/api")
 public class PortfolioController {
@@ -31,6 +40,12 @@ public class PortfolioController {
     @GetMapping("/portfolio/{userId}")
     public ResponseEntity<PortfolioResponseDTO> getPortfolio(@PathVariable Long userId) {
         PortfolioResponseDTO response = portfolioService.getPortfolio(userId);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/stocks/{stock_id}")
+    public ResponseEntity<Optional<Stock>> getStockById(@PathVariable Long stock_id){
+        Optional<Stock> response= stockService.findStockById(stock_id);
         return ResponseEntity.ok(response);
     }
 
