@@ -15,8 +15,8 @@ This is a Spring Boot-based application designed to manage user stock portfolios
 ### Steps
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
-   cd stocks-portfolio-application
+   git clone https://github.com/ShrishRajGupta/PortfolioGroww.git
+   cd PortfolioGroww
    ```
 
 2. Set up the database:
@@ -247,6 +247,42 @@ This is a Spring Boot-based application designed to manage user stock portfolios
 - `LocalDateTime createdAt`
 
 ---
+
+## Diagrams
+
+### System Architecture
+```mermaid
+flowchart TD
+    A[Client] -->|API Requests| B[Spring Boot Application]
+    B --> C[Controller Layer]
+    C --> D[Service Layer]
+    D --> E[Repository Layer]
+    E --> F[(MySQL Database)]
+```
+
+
+
+### Data Flow for Trade API
+```mermaid
+sequenceDiagram;
+    participant Client
+    participant Controller
+    participant Service
+    participant Repository
+    participant Database
+
+    Client->>Controller: POST /api/trade
+    Controller->>Service: recordTrade(tradeRequest)
+    Service->>Repository: Save trade data
+    Repository->>Database: Insert trade record
+    Database-->>Repository: Acknowledge Save
+    Repository-->>Service: Return Trade Data
+    Service-->>Controller: Return Response
+    Controller-->>Client: Return Success Message
+```
+
+---
+
 
 ## Additional Notes
 - **Database Schema:** The database schema is managed automatically by Hibernate.

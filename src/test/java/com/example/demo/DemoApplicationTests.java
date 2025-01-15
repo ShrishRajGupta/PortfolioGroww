@@ -100,17 +100,17 @@ class DemoApplicationTests {
 
 		System.out.println("Setup complete");
 	}
-//
-//	@SneakyThrows
-//	@Test
-//	void testGetPortfolioForUser() {
-//		PortfolioResponseDTO response = portfolioService.getPortfolio(1L);
-////		assertTrue(true);
-//		assertNotNull(response);
-//		assertEquals(10, response.getHoldings().size());
-//		assertTrue(response.getTotalHoldingValue() > 0);
-//		assertTrue(response.getTotalPLPercentage() >= -100);
-//	}
+
+	@SneakyThrows
+	@Test
+	void testGetPortfolioForUser() {
+		PortfolioResponseDTO response = portfolioService.getPortfolio(1L);
+//		assertTrue(true);
+		assertNotNull(response);
+		assertEquals(10, response.getHoldings().size());
+		assertTrue(response.getTotalHoldingValue() > 0);
+		assertTrue(response.getTotalPLPercentage() >= -100);
+	}
 
 //	@Test
 //	void testGetAllStocks() {
@@ -180,37 +180,6 @@ class DemoApplicationTests {
 //		assertEquals(10, stocks.size());
 //		assertTrue(stocks.get(0).getOpenPrice() > 0);
 //	}
-//
-//	@Test
-//	void testPortfolioHoldingsCalculation() {
-//		PortfolioResponseDTO response = testUtility.getPortfolioForUser(1L);
-//
-//		assertNotNull(response);
-//		response.getHoldings().forEach(holding -> {
-//			assertTrue(holding.getCurrentPrice() >= holding.getBuyPrice());
-//			assertTrue(holding.getGainLoss() >= 0);
-//		});
-//	}
-//
-//	@Test
-//	void testCsvProcessingInvalidData() {
-//		String invalidCsv = "Invalid,Data\nWrong,Format";
-//		MockMultipartFile file = new MockMultipartFile("invalid.csv", invalidCsv.getBytes(StandardCharsets.UTF_8));
-//
-//		RuntimeException exception = assertThrows(RuntimeException.class, () -> {
-//			testUtility.updateStocksFromCsv(invalidCsv);
-//		});
-//
-//		assertTrue(exception.getMessage().contains("Failed to process CSV"));
-//	}
-//
-//	@Test
-//	void testStockDataAfterCsvUpdate() {
-//		String csvData = "Stock13,130,135,140,125,132.5";
-//		testUtility.updateStocksFromCsv(csvData);
-//
-//		Stock stock = stockRepository.findByName("Stock13").get(0);
-//		assertNotNull(stock);
-//		assertEquals(132.5, stock.getSettlementPrice());
-//	}
+
+
 }
