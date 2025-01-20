@@ -14,6 +14,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
 import java.util.Optional;
 
 @Controller
@@ -53,5 +54,29 @@ public class PortfolioController {
     public ResponseEntity<String> updateStocks(@RequestParam("file") MultipartFile file) {
         stockService.processCsv(file);
         return ResponseEntity.ok("Stocks updated successfully");
+    }
+
+    @GetMapping("/stocks/search")
+    public ResponseEntity<?> searchStock(@RequestParam("stock") String name) {
+        if (name == null || name.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body("Stock name must not be empty.");
+        }
+
+        if (name.length() < 2) {
+            return ResponseEntity.badRequest().body("Stock name must be at least 2 characters long.");
+        }
+
+        if (!name.matches("^[a-zA-Z0-9 ]+$")) {
+            return ResponseEntity.badRequest().body("Stock name contains invalid characters. Only letters, numbers, and spaces are allowed.");
+        }
+        if (name == null || name.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(null);
+        }
+
+        List<Stock> stocks = stockService.searchStockByName(name);
+        if (stocks.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(stocks);
     }
 }

@@ -1,6 +1,5 @@
 package com.example.demo.service.Impl;
 
-import com.example.demo.dto.*;
 import com.example.demo.entity.*;
 import com.example.demo.repository.*;
 import com.example.demo.service.StockService;
@@ -44,9 +43,13 @@ public class StockServiceImpl implements StockService {
     }
 
     @Override
+    public List<Stock> searchStockByName(String name){
+        return stockRepository.findByNameContainingIgnoreCase(name.trim());
+    }
+
+    @Override
     public Optional<Stock> findStockById(Long id){
-        Optional<Stock> response= stockRepository.findById(id);
-        return response;
+        return stockRepository.findById(id);
     }
 
     @Override

@@ -13,4 +13,6 @@ public interface StockRepository extends JpaRepository<Stock, Long> {
 //    void save(Stock stock);
 
     Optional<Stock> findById(Long stockId);
+
+    List<Stock> findByNameContainingIgnoreCase(String trim);
 }
