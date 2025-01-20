@@ -6,11 +6,13 @@ import com.example.demo.service.StockService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -21,6 +23,38 @@ public class StockServiceImpl implements StockService {
 
     @Autowired
     private final StockRepository stockRepository;
+
+    @Value("${spring.datasource.stock-sheet-url}")
+    String csvUrl;
+
+
+    @Override
+    public void downloadAndProcessStockFile() {
+        try {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(new URL(csvUrl).openStream()));
+            String line;
+            List<Stock> stocksToUpdate = new ArrayList<>();
+
+            while ((line = reader.readLine()) != null) {
+                String[] fields = line.split(",");
+
+                if (fields.length >= 6) {
+                    Stock stock = new Stock();
+                    stock.setName(fields[0].trim());
+                    stock.setOpenPrice(Double.parseDouble(fields[1].trim()));
+                    stock.setClosePrice(Double.parseDouble(fields[2].trim()));
+                    stock.setHighPrice(Double.parseDouble(fields[3].trim()));
+                    stock.setLowPrice(Double.parseDouble(fields[4].trim()));
+                    stock.setSettlementPrice(Double.parseDouble(fields[5].trim()));
+                    stocksToUpdate.add(stock);
+                }
+            }
+
+            stockRepository.saveAll(stocksToUpdate);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
     @Override
     public void processCsv(MultipartFile file) {

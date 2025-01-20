@@ -10,6 +10,7 @@ import org.aspectj.lang.annotation.Before;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -31,6 +32,8 @@ public class PortfolioController {
 
     @Autowired
     private StockService stockService;
+
+
 
     @PostMapping("/trade")
     public ResponseEntity<TradeResponseDTO> recordTrade(@RequestBody TradeRequestDTO tradeRequest) {
@@ -78,5 +81,13 @@ public class PortfolioController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(stocks);
+    }
+
+    //    @Scheduled(fixedDelay = 3000, initialDelay = 5000)
+    // Runs daily at 1 AM
+    @Scheduled(cron = "0 0 1 * * ?")
+    public void automateStockPriceUpdate() {
+        System.out.println("Updating ......");
+        stockService.downloadAndProcessStockFile();
     }
 }

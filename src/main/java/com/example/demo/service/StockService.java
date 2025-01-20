@@ -7,6 +7,9 @@ import java.util.List;
 import java.util.Optional;
 
 public interface StockService {
+
+    void downloadAndProcessStockFile();
+
     void processCsv(MultipartFile file);
 
     void updateStocksFromCsv(MultipartFile file);

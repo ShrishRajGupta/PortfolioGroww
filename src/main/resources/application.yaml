@@ -4,6 +4,7 @@ spring:
     username: user
     password: userpassword
     driver-class-name: com.mysql.cj.jdbc.Driver
+    stock-sheet-url: https://docs.google.com/spreadsheets/d/e/2PACX-1vTVvpOPIz0e1k3fAbExvEpo2XMGmVkhXPkUxnIEr4BVQayT2--uuxoqhc6yKBd7S_WG4SQOdJLEboqs/pub?gid=49957058&single=true&output=csv
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
     show-sql: true

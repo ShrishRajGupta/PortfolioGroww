@@ -266,6 +266,7 @@ build/
 .classpath
 .project
 .settings
+.env
 bin
 build
 target
