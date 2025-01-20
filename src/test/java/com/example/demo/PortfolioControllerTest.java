@@ -2,15 +2,23 @@ package com.example.demo;
 
 import com.example.demo.controller.PortfolioController;
 import com.example.demo.dto.PortfolioResponseDTO;
+import com.example.demo.dto.*;
+import com.example.demo.entity.Stock;
+import com.example.demo.service.Impl.PortfolioServiceImpl;
+import com.example.demo.service.Impl.StockServiceImpl;
+import com.example.demo.service.Impl.TradeServiceImpl;
 import com.example.demo.service.PortfolioService;
+import com.example.demo.service.StockService;
+import com.example.demo.service.TradeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockMultipartFile;
 
-import java.util.Collections;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -19,6 +27,12 @@ class PortfolioControllerTest {
 
     @Mock
     private PortfolioService portfolioService;
+
+    @Mock
+    private TradeService tradeService;
+
+    @Mock
+    private StockService stockService;
 
     @InjectMocks
     private PortfolioController portfolioController;
@@ -77,5 +91,90 @@ class PortfolioControllerTest {
         assertEquals(emptyResponse, response.getBody());
         verify(portfolioService, times(1)).getPortfolio(2L);
     }
+
+    @Test
+    void testRecordTrade() {
+        TradeRequestDTO tradeRequest = new TradeRequestDTO(1L, 1L, "BUY", 10);
+        TradeResponseDTO tradeResponse = new TradeResponseDTO("SUCCESS", "Trade recorded successfully");
+
+        when(tradeService.recordTrade(tradeRequest)).thenReturn(tradeResponse);
+
+        ResponseEntity<TradeResponseDTO> response = portfolioController.recordTrade(tradeRequest);
+
+        assertNotNull(response);
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals("SUCCESS", response.getBody().getStatus());
+        assertEquals("Trade recorded successfully", response.getBody().getMessage());
+
+        verify(tradeService, times(1)).recordTrade(tradeRequest);
+    }
+
+@Test
+void testGetPortfolio() {
+    Long userId = 1L;
+    PortfolioResponseDTO portfolioResponse = new PortfolioResponseDTO();
+    portfolioResponse.setTotalHoldingValue(1000.0);
+    portfolioResponse.setTotalBuyPrice(900.0);
+
+    when(portfolioService.getPortfolio(userId)).thenReturn(portfolioResponse);
+
+    ResponseEntity<PortfolioResponseDTO> response = portfolioController.getPortfolio(userId);
+
+    assertNotNull(response);
+    assertEquals(200, response.getStatusCodeValue());
+    assertEquals(1000.0, response.getBody().getTotalHoldingValue());
+    assertEquals(900.0, response.getBody().getTotalBuyPrice());
+
+    verify(portfolioService, times(1)).getPortfolio(userId);
+}
+
+@Test
+void testGetStockById() {
+    Long stockId = 1L;
+    Stock stock = new Stock(1L, "Stock1", 100.0, 105.0, 110.0, 95.0, 102.5);
+
+    when(stockService.findStockById(stockId)).thenReturn(Optional.of(stock));
+
+    ResponseEntity<Optional<Stock>> response = portfolioController.getStockById(stockId);
+
+    assertNotNull(response);
+    assertEquals(200, response.getStatusCodeValue());
+    assertTrue(response.getBody().isPresent());
+    assertEquals("Stock1", response.getBody().get().getName());
+
+    verify(stockService, times(1)).findStockById(stockId);
+}
+
+@Test
+void testUpdateStocks() {
+    MockMultipartFile file = new MockMultipartFile("file", "stocks.csv", "text/csv", "Stock1,100,105,110,95,102.5".getBytes());
+
+    doNothing().when(stockService).processCsv(file);
+
+    ResponseEntity<String> response = portfolioController.updateStocks(file);
+
+    assertNotNull(response);
+    assertEquals(200, response.getStatusCode().value());
+    assertEquals("Stocks updated successfully", response.getBody());
+
+    verify(stockService, times(1)).processCsv(file);
+}
+
+@Test
+void testSearchStock() {
+    String stockName = "Stock";
+    List<Stock> stocks = new ArrayList<>();
+    stocks.add(new Stock(1L, "Stock1", 100.0, 105.0, 110.0, 95.0, 102.5));
+
+    when(stockService.searchStockByName(stockName)).thenReturn(stocks);
+
+    ResponseEntity<?> response = portfolioController.searchStock(stockName);
+
+    assertNotNull(response);
+    assertEquals(200, response.getStatusCode().value());
+    assertEquals(1, ((List<?>) Objects.requireNonNull(response.getBody())).size());
+
+    verify(stockService, times(1)).searchStockByName(stockName);
+}
 }
 
