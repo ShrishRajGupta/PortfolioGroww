@@ -7,10 +7,15 @@ This is a Spring Boot-based application designed to manage user stock portfolios
 ## Installation Steps
 
 ### Prerequisites
+#### Installed
+- Docker
+- IDE (e.g., IntelliJ IDEA, Eclipse)
+- 
+#### Optional
 - Java 17 or later
 - Maven 3.6+
 - MySQL Server
-- IDE (e.g., IntelliJ IDEA, Eclipse)
+
 
 ### Steps
 1. Clone the repository:
@@ -18,37 +23,33 @@ This is a Spring Boot-based application designed to manage user stock portfolios
    git clone https://github.com/ShrishRajGupta/PortfolioGroww.git
    cd PortfolioGroww
    ```
-
-2. Set up the database:
-    - Create a MySQL database named `stocks_portfolio` (or configure `application.properties`/`application.yml` for your database).
-    - Run the following script to create the schema (if required):
-      ```sql
-      CREATE DATABASE stocks_portfolio;
-      ```
-
-3. Configure the application:
-    - Update the `application.properties` or `application.yml` file with your database credentials:
-      ```properties
-      spring.datasource.url=jdbc:mysql://localhost:3306/stocks_portfolio
-      spring.datasource.username=your_username
-      spring.datasource.password=your_password
-      spring.jpa.hibernate.ddl-auto=update
-      ```
-
-4. Build the application:
+2. Setup package
    ```bash
-   mvn clean install
+   mvn clean package
+   ```
+   
+3. Build Docker image: 
+   ```bash
+   docker build -t demo-app .
+   ```
+   Maven build will be executes during creation of the docker image.
+
+   >Note:if you run this command for first time it will take some time in order to download base image from [DockerHub](https://hub.docker.com/)
+
+4. Run the application:
+   ```bash
+   docker run -d --name demo-app -p 8080:8080 demo-app
    ```
 
-5. Run the application:
-   ```bash
-   mvn spring-boot:run
-   ```
-
-6. Access the APIs:
+5. Access the APIs:
     - Base URL: `http://localhost:8080/api`
 
 ---
+
+## Test Coverage
+
+<img src="TestCoverage.png" width ="350px" title="Test coverage" alt="Jacoco page">
+
 
 ## API Endpoints
 
@@ -283,12 +284,19 @@ sequenceDiagram;
 
 ---
 
+## Licence 🍁
+### [**MIT**](/LICENSE)  &copy; [Shrish Raj Gupta](https://github.com/ShrishRajGupta)
 
-## Additional Notes
-- **Database Schema:** The database schema is managed automatically by Hibernate.
-- **Testing:** Use Postman or similar tools to test the endpoints.
-- **Default Ports:** The application runs on port `8080` by default. You can change this in `application.yaml`.
+## Contributing 💙
 
+PR's are welcome !Found a Bug ?
+
+Create an [Issue](https://github.com/ShrishRajGupta/PortfolioGroww/issues).
+
+## 💖 Like this project ?
+
+Leave a ⭐ If you think this project is cool.
+<p align="center"><img src="https://github.githubassets.com/images/mona-whisper.gif" alt="mona whisper" /></p>
 ---
 
 ## Contact
