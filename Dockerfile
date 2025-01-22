@@ -9,7 +9,8 @@ EXPOSE 8080
 ENV MYSQL_ROOT_PASSWORD=rootpassword \
     MYSQL_DATABASE=mydb \
     MYSQL_USER=user\
-    MYSQL_PASSWORD=userpassword
+    MYSQL_PASSWORD=userpassword\
+    MYSQL_HOST=host.docker.internal
 
 # Kafka Service Configuration
 # Ensures Kafka is reachable by the application
