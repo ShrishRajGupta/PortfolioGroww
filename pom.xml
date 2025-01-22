@@ -161,6 +161,7 @@
 			</plugin>
 
 		</plugins>
+		<finalName>demo-application</finalName>
 	</build>
 
 </project>
