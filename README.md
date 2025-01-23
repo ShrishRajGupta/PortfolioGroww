@@ -10,7 +10,6 @@ This is a Spring Boot-based application designed to manage user stock portfolios
 #### Installed
 - Docker
 - IDE (e.g., IntelliJ IDEA, Eclipse)
-- 
 #### Optional
 - Java 17 or later
 - Maven 3.6+
@@ -48,7 +47,7 @@ This is a Spring Boot-based application designed to manage user stock portfolios
 
 ## Test Coverage
 
-<img src="TestCoverage.png" width ="350px" title="Test coverage" alt="Jacoco page">
+<img src="TestCoverage.png" width ="800px" title="Test coverage" alt="Jacoco page">
 
 
 ## API Endpoints
