@@ -1,0 +1,27 @@
+replicaCount: 1
+
+image:
+  repository: demo-app
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+secrets:
+  name: demo-app-secrets
+  mysqlHost: MTcyLjE2Ljk3LjQy
+  mysqlDatabase: bXlkYg==
+  mysqlUser: dXNlcg==
+  mysqlPassword: dXNlcnBhc3N3b3Jk
+  kafkaAdvertisedListeners: MTcyLjE2Ljk3LjQyOjkwOTI=
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+  limits:
+    memory: "1024Mi"
+    cpu: "1"

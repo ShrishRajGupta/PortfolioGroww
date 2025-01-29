@@ -1,6 +1,10 @@
 package com.example.demo.dto;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
+@NoArgsConstructor  // Required for Jackson deserialization
+@AllArgsConstructor
 @Data
 public class TradeRequestDTO {
     private Long userAccountId;
@@ -16,3 +20,5 @@ public class TradeRequestDTO {
         this.quantity=i;
     }
 }
+
+

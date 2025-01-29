@@ -44,7 +44,43 @@ This is a Spring Boot-based application designed to manage user stock portfolios
     - Base URL: `http://localhost:8080/api`
 
 ---
+## Kubernetes Deployment
 
+### Prerequisites
+- Kubectl
+- Docker
+- Helm
+
+### Steps
+1. Create `secrets.yml` file with the following content:
+   ```yaml
+   apiVersion: v1
+   kind: Secret
+   metadata:
+     name: mysql-secrets
+   type: Opaque
+   data:
+     mysql-root-password: <base64-encoded-root-password>
+     mysql-database: <base64-encoded-database-name>
+     mysql-user: <base64-encoded-username>
+     mysql-password: <base64-encoded-password>
+   ```
+   Replace `<base64-encoded-...>` with the base64-encoded values of your MySQL root password, database name, username, and password.
+ 
+    >Note: You can use the following command to encode a string to base64:
+    >```bash
+    >echo -n "your-string" | base64'
+    >```
+   
+2. Create a Kubernetes secret:
+   ```bash
+   kubectl apply -f secrets.yml
+   ```
+3. Create a Kubernetes deployment:
+   ```bash
+    kubectl apply -f k8s/deployment.yml
+    ```
+   
 ## Test Coverage
 
 <img src="TestCoverage.png" width ="800px" title="Test coverage" alt="Jacoco page">

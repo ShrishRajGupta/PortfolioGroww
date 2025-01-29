@@ -35,7 +35,7 @@ public class KafkaConfig {
 
     private Map<String, Object> consumerProps() {
         Map<String, Object> props = new HashMap<>();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9093");
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "172.16.97.42:9092");
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "group");
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
@@ -51,7 +51,7 @@ public class KafkaConfig {
 
     private Map<String, Object> senderProps() {
         Map<String, Object> props = new HashMap<>();
-        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9093");
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "172.16.97.42:9092");
         props.put(ProducerConfig.LINGER_MS_CONFIG, 10);
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, String.class);
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
