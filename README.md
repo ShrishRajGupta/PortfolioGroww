@@ -318,7 +318,6 @@ sequenceDiagram;
 - `Double price`
 - `LocalDateTime createdAt`
 
----
 
 ## Licence 🍁
 ### [**MIT**](/LICENSE)  &copy; [Shrish Raj Gupta](https://github.com/ShrishRajGupta)
