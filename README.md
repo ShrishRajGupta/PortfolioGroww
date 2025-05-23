@@ -1,5 +1,9 @@
 # Stocks Portfolio Application
 
+<p style="text-align:center;"> 
+<img src="groww-logo-png.png" width ="180px" title="Test coverage" alt="Jacoco page">
+</p>
+
 This is a Spring Boot-based application designed to manage user stock portfolios. It provides RESTful APIs to manage users, stocks, and trades, including features like portfolio calculation and randomization of stock prices.
 
 ---
