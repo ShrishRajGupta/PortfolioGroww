@@ -63,5 +63,7 @@ public class PortfolioServiceImpl implements PortfolioService {
         response.setTotalPLPercentage(totalPLPercentage);
 
         return response;
+        System.out.println("tanya");
     }
 }
+
