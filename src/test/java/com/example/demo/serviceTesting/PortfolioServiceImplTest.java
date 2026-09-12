@@ -1,6 +1,5 @@
 package com.example.demo.serviceTesting;
 
-
 import com.example.demo.dto.PortfolioHoldingDTO;
 import com.example.demo.dto.PortfolioResponseDTO;
 import com.example.demo.entity.Stock;
@@ -14,6 +13,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -37,111 +37,93 @@ class PortfolioServiceImplTest {
         MockitoAnnotations.openMocks(this);
     }
 
+    private static Stock stock(long id, String name, String close) {
+        return new Stock(id, name, new BigDecimal("1"), new BigDecimal(close),
+                new BigDecimal("1"), new BigDecimal("1"), new BigDecimal("1"));
+    }
+
+    private static Trade trade(long id, Stock stock, int qty, String price) {
+        Trade t = new Trade();
+        t.setId(id);
+        t.setStock(stock);
+        t.setQuantity(qty);
+        t.setPrice(new BigDecimal(price));
+        return t;
+    }
+
+    private static void assertMoney(String expected, BigDecimal actual) {
+        assertNotNull(actual);
+        assertEquals(0, new BigDecimal(expected).compareTo(actual), "expected " + expected + " but was " + actual);
+    }
+
     @Test
-    void testGetPortfolio_Success() {
-        Long userId = 1L;
-
-        // Mock trades
-        Trade trade1 = new Trade();
-        trade1.setId(1L);
-        trade1.setQuantity(10);
-        trade1.setPrice(100.0);
-        Stock stock1 = new Stock(1L, "Stock1", 100.0, 110.0, 120.0, 90.0, 105.0);
-        trade1.setStock(stock1);
-
-        Trade trade2 = new Trade();
-        trade2.setId(2L);
-        trade2.setQuantity(5);
-        trade2.setPrice(200.0);
-        Stock stock2 = new Stock(2L, "Stock2", 200.0, 220.0, 240.0, 180.0, 215.0);
-        trade2.setStock(stock2);
-
-        List<Trade> trades = List.of(trade1, trade2);
-        when(tradeRepository.findByUserAccountId(userId)).thenReturn(trades);
-
-        // Mock stocks
+    void getPortfolio_valuesHoldingsAtClosePriceAndComputesTotals() {
+        Stock stock1 = stock(1L, "Stock1", "110");
+        Stock stock2 = stock(2L, "Stock2", "220");
+        when(tradeRepository.findByUserAccountId(1L))
+                .thenReturn(List.of(trade(1L, stock1, 10, "100"), trade(2L, stock2, 5, "200")));
         when(stockRepository.findById(1L)).thenReturn(Optional.of(stock1));
         when(stockRepository.findById(2L)).thenReturn(Optional.of(stock2));
 
-        // Execute method
-        PortfolioResponseDTO response = portfolioService.getPortfolio(userId);
+        PortfolioResponseDTO response = portfolioService.getPortfolio(1L);
 
-        // Validate response
-        assertNotNull(response);
         assertEquals(2, response.getHoldings().size());
-        assertEquals(2200.0, response.getTotalHoldingValue());
-        assertEquals(2000.0, response.getTotalBuyPrice());
-        assertEquals(200.0, response.getTotalPL());
-        assertEquals(10.0, response.getTotalPLPercentage(), 0.01);
+        assertMoney("2200", response.getTotalHoldingValue());
+        assertMoney("2000", response.getTotalBuyPrice());
+        assertMoney("200", response.getTotalPL());
+        assertEquals(new BigDecimal("10.00"), response.getTotalPLPercentage());
 
-        // Validate holdings
-        PortfolioHoldingDTO holding1 = response.getHoldings().get(0);
-        assertEquals("Stock1", holding1.getStockName());
-        assertEquals(10, holding1.getQuantity());
-        assertEquals(1100.0, holding1.getCurrentPrice() * holding1.getQuantity());
+        PortfolioHoldingDTO h1 = response.getHoldings().get(0);
+        assertEquals("Stock1", h1.getStockName());
+        assertEquals(10, h1.getQuantity());
+        assertMoney("100", h1.getBuyPrice());
+        assertMoney("110", h1.getCurrentPrice());
+        assertMoney("100", h1.getGainLoss());
 
-        PortfolioHoldingDTO holding2 = response.getHoldings().get(1);
-        assertEquals("Stock2", holding2.getStockName());
-        assertEquals(5, holding2.getQuantity());
-        assertEquals(1100.0, holding2.getCurrentPrice() * holding2.getQuantity());
+        PortfolioHoldingDTO h2 = response.getHoldings().get(1);
+        assertMoney("100", h2.getGainLoss());
 
-        // Verify interactions
-        verify(tradeRepository, times(1)).findByUserAccountId(userId);
         verify(stockRepository, times(2)).findById(anyLong());
     }
 
     @Test
-    void testGetPortfolio_NoTrades() {
-        Long userId = 2L;
+    void getPortfolio_noTrades_returnsZerosNotNaN() {
+        when(tradeRepository.findByUserAccountId(2L)).thenReturn(new ArrayList<>());
 
-        // Mock trades
-        when(tradeRepository.findByUserAccountId(userId)).thenReturn(new ArrayList<>());
+        PortfolioResponseDTO response = portfolioService.getPortfolio(2L);
 
-        // Execute method
-        PortfolioResponseDTO response = portfolioService.getPortfolio(userId);
-
-        // Validate response
-        assertNotNull(response);
-        assertEquals(0, response.getHoldings().size());
-        assertEquals(0.0, response.getTotalHoldingValue());
-        assertEquals(0.0, response.getTotalBuyPrice());
-        assertEquals(0.0, response.getTotalPL());
-        assertEquals(Double.NaN,response.getTotalPLPercentage());
-
-        // Verify interactions
-        verify(tradeRepository, times(1)).findByUserAccountId(userId);
+        assertTrue(response.getHoldings().isEmpty());
+        assertMoney("0", response.getTotalHoldingValue());
+        assertMoney("0", response.getTotalBuyPrice());
+        assertMoney("0", response.getTotalPL());
+        assertEquals(new BigDecimal("0.00"), response.getTotalPLPercentage());
         verifyNoInteractions(stockRepository);
     }
 
     @Test
-    void testGetPortfolio_StockNotFound() {
-        Long userId = 1L;
-
-        // Mock trades
-        Trade trade = new Trade();
-        trade.setId(1L);
-        trade.setQuantity(10);
-        trade.setPrice(100.0);
-        Stock stock = new Stock(1L, "Stock1", 100.0, 110.0, 120.0, 90.0, 105.0);
-        trade.setStock(stock);
-
-        when(tradeRepository.findByUserAccountId(userId)).thenReturn(List.of(trade));
+    void getPortfolio_skipsTradesWhoseStockIsMissing() {
+        Stock stock = stock(1L, "Stock1", "110");
+        when(tradeRepository.findByUserAccountId(1L)).thenReturn(List.of(trade(1L, stock, 10, "100")));
         when(stockRepository.findById(1L)).thenReturn(Optional.empty());
 
-        // Execute method
-        PortfolioResponseDTO response = portfolioService.getPortfolio(userId);
+        PortfolioResponseDTO response = portfolioService.getPortfolio(1L);
 
-        // Validate response
-        assertNotNull(response);
-        assertEquals(0, response.getHoldings().size());
-        assertEquals(0.0, response.getTotalHoldingValue());
-        assertEquals(0.0, response.getTotalBuyPrice());
-        assertEquals(0.0, response.getTotalPL());
-        assertEquals(Double.NaN,response.getTotalPLPercentage());
+        assertTrue(response.getHoldings().isEmpty());
+        assertMoney("0", response.getTotalBuyPrice());
+        assertEquals(new BigDecimal("0.00"), response.getTotalPLPercentage());
+        verify(stockRepository).findById(1L);
+    }
 
+    @Test
+    void getPortfolio_negativePnlAndRounding() {
+        Stock stock = stock(1L, "Stock1", "99.995");
+        when(tradeRepository.findByUserAccountId(1L)).thenReturn(List.of(trade(1L, stock, 3, "100")));
+        when(stockRepository.findById(1L)).thenReturn(Optional.of(stock));
 
-        // Verify interactions
-        verify(tradeRepository, times(1)).findByUserAccountId(userId);
-        verify(stockRepository, times(1)).findById(1L);
+        PortfolioResponseDTO response = portfolioService.getPortfolio(1L);
+
+        assertMoney("-0.015", response.getTotalPL());
+        // -0.015 / 300 * 100 = -0.005 -> HALF_UP at 2 dp
+        assertEquals(new BigDecimal("-0.01"), response.getTotalPLPercentage());
     }
 }
