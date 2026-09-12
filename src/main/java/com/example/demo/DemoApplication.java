@@ -2,13 +2,11 @@ package com.example.demo;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
-@SpringBootApplication(
-		scanBasePackages = "com.example.demo"
-)
-@EnableJpaRepositories(basePackages = "com.example.demo.repository")
+// Repositories live under this package and are picked up by Spring Boot's JPA auto-configuration;
+// an explicit @EnableJpaRepositories here would also force JPA into web-slice tests (@WebMvcTest).
+@SpringBootApplication
 @EnableScheduling
 public class DemoApplication {
 
