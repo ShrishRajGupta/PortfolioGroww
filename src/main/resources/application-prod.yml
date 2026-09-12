@@ -1,0 +1,10 @@
+# Production: quiet logs, no SQL echo. Connection/broker settings come from the environment
+# (MYSQL_HOST/MYSQL_USER/MYSQL_PASSWORD, KAFKA_BOOTSTRAP_SERVERS) — see application.yml.
+spring:
+  jpa:
+    show-sql: false
+
+logging:
+  level:
+    org.hibernate.SQL: warn
+    com.example.demo: info
