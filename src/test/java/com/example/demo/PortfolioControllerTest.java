@@ -149,13 +149,13 @@ void testGetStockById() {
 void testUpdateStocks() {
     MockMultipartFile file = new MockMultipartFile("file", "stocks.csv", "text/csv", "Stock1,100,105,110,95,102.5".getBytes());
 
-    doNothing().when(stockService).processCsv(file);
+    when(stockService.processCsv(file)).thenReturn(1);
 
     ResponseEntity<String> response = portfolioController.updateStocks(file);
 
     assertNotNull(response);
     assertEquals(200, response.getStatusCode().value());
-    assertEquals("Stocks updated successfully", response.getBody());
+    assertEquals("Stocks updated successfully (1 rows)", response.getBody());
 
     verify(stockService, times(1)).processCsv(file);
 }
