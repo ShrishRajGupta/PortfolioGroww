@@ -118,7 +118,7 @@ sequenceDiagram;
    ```
 3. Create a Kubernetes deployment:
    ```bash
-    kubectl apply -f k8s/deployment.yml
+    kubectl apply -f k8s-deployment.yaml
     ```
    
 ## Test Coverage
@@ -216,7 +216,7 @@ sequenceDiagram;
 
 
 ### 5. Populate Users
-**Endpoint:** `GET /api/populate/users`
+**Endpoint:** `POST /api/populate/users` _(dev profile only)_
 
 **Description:** Adds 10 dummy user accounts to the database.
 
@@ -228,7 +228,7 @@ sequenceDiagram;
 ---
 
 ### 6. Populate Stocks
-**Endpoint:** `GET /api/populate/stocks`
+**Endpoint:** `POST /api/populate/stocks` _(dev profile only)_
 
 **Description:** Adds 10 dummy stocks with predefined price ranges to the database.
 
@@ -240,7 +240,7 @@ sequenceDiagram;
 ---
 
 ### 7. Populate Trades
-**Endpoint:** `GET /api/populate/trades`
+**Endpoint:** `POST /api/populate/trades` _(dev profile only)_
 
 **Description:** Creates random trades for all users and stocks, with random trade types (`BUY` or `SELL`), quantities, and prices.
 
@@ -338,7 +338,12 @@ Leave a ⭐ If you think this project is cool.
 <p align="center"><img src="https://github.githubassets.com/images/mona-whisper.gif" alt="mona whisper" /></p>
 ---
 
+## Configuration & Schema
+
+- **Profiles:** `dev` is the default for local runs (SQL logging on, `/api/populate/*` seed endpoints enabled). Deployments set `SPRING_PROFILES_ACTIVE=prod`.
+- **Environment:** `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE` (or `MYSQL_DB`), `MYSQL_USER`, `MYSQL_PASSWORD`, `KAFKA_BOOTSTRAP_SERVERS` (defaults `localhost:9092`), `STOCK_SHEET_URL`, `STOCK_PRICE_CRON`. No host addresses are hardcoded in the app.
+- **Schema migrations:** the database schema is owned by [Flyway](https://flywaydb.org) — versioned SQL lives in `src/main/resources/db/migration` (`V1__baseline.sql` onward) and Hibernate runs in `validate` mode. Databases created earlier by `ddl-auto=update` are adopted automatically (`baseline-on-migrate`).
+- **Stock prices:** refreshed daily (`STOCK_PRICE_CRON`) from the published sheet, or on demand via `POST /api/stocks/update` (CSV upload). Rows are upserted by stock name.
+
 ## Contact
 For any issues, feel free to reach out via email at `shrishrg@gmail.com` or create an issue in the repository.
-
-tanya

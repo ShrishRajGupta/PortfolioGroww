@@ -13,7 +13,8 @@ import org.springframework.stereotype.Component;
 public class TransactionConsumer {
     private final TradeService tradeService;
 
-    @KafkaListener(topics = "newTransactions", groupId = "spend-analysis-group")
+    @KafkaListener(topics = "newTransactions", groupId = "spend-analysis-group",
+                   autoStartup = "${app.kafka.consumer-enabled}")
     public void consumeTransaction(TradeRequestDTO transactionRequest) {
         tradeService.recordTrade(transactionRequest);
     }

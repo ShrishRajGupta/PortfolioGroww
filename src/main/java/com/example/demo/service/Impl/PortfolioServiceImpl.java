@@ -1,14 +1,18 @@
 package com.example.demo.service.Impl;
 
-import com.example.demo.dto.*;
-import com.example.demo.entity.*;
-import com.example.demo.repository.*;
+import com.example.demo.dto.PortfolioHoldingDTO;
+import com.example.demo.dto.PortfolioResponseDTO;
+import com.example.demo.entity.Stock;
+import com.example.demo.entity.Trade;
+import com.example.demo.repository.StockRepository;
+import com.example.demo.repository.TradeRepository;
 import com.example.demo.service.PortfolioService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -18,10 +22,9 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class PortfolioServiceImpl implements PortfolioService {
 
-    @Autowired
-    private final TradeRepository tradeRepository;
+    private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
-    @Autowired
+    private final TradeRepository tradeRepository;
     private final StockRepository stockRepository;
 
     @Override
@@ -29,31 +32,34 @@ public class PortfolioServiceImpl implements PortfolioService {
         List<Trade> trades = tradeRepository.findByUserAccountId(userId);
 
         List<PortfolioHoldingDTO> holdings = new ArrayList<>();
-        double totalHoldingValue = 0.0;
-        double totalBuyPrice = 0.0;
+        BigDecimal totalHoldingValue = BigDecimal.ZERO;
+        BigDecimal totalBuyPrice = BigDecimal.ZERO;
 
         for (Trade trade : trades) {
             Optional<Stock> stockOpt = stockRepository.findById(trade.getStock().getId());
-            if (stockOpt.isPresent()) {
-                Stock stock = stockOpt.get();
-                PortfolioHoldingDTO holding = new PortfolioHoldingDTO();
-                holding.setStockName(stock.getName());
-                holding.setStockId(stock.getId());
-                holding.setQuantity(trade.getQuantity());
-                holding.setBuyPrice(trade.getPrice());
-                holding.setCurrentPrice(stock.getClosePrice());
-                double gainLoss = (stock.getClosePrice() - trade.getPrice()) * trade.getQuantity();
-                holding.setGainLoss(gainLoss);
-
-                holdings.add(holding);
-
-                totalHoldingValue += stock.getClosePrice() * trade.getQuantity();
-                totalBuyPrice += trade.getPrice() * trade.getQuantity();
+            if (stockOpt.isEmpty()) {
+                continue;
             }
+            Stock stock = stockOpt.get();
+            BigDecimal quantity = BigDecimal.valueOf(trade.getQuantity());
+
+            PortfolioHoldingDTO holding = new PortfolioHoldingDTO();
+            holding.setStockName(stock.getName());
+            holding.setStockId(stock.getId());
+            holding.setQuantity(trade.getQuantity());
+            holding.setBuyPrice(trade.getPrice());
+            holding.setCurrentPrice(stock.getClosePrice());
+            holding.setGainLoss(stock.getClosePrice().subtract(trade.getPrice()).multiply(quantity));
+            holdings.add(holding);
+
+            totalHoldingValue = totalHoldingValue.add(stock.getClosePrice().multiply(quantity));
+            totalBuyPrice = totalBuyPrice.add(trade.getPrice().multiply(quantity));
         }
 
-        double totalPL = totalHoldingValue - totalBuyPrice;
-        double totalPLPercentage = (totalPL / totalBuyPrice) * 100;
+        BigDecimal totalPL = totalHoldingValue.subtract(totalBuyPrice);
+        BigDecimal totalPLPercentage = totalBuyPrice.signum() == 0
+                ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                : totalPL.multiply(HUNDRED).divide(totalBuyPrice, 2, RoundingMode.HALF_UP);
 
         PortfolioResponseDTO response = new PortfolioResponseDTO();
         response.setHoldings(holdings);
@@ -61,9 +67,6 @@ public class PortfolioServiceImpl implements PortfolioService {
         response.setTotalBuyPrice(totalBuyPrice);
         response.setTotalPL(totalPL);
         response.setTotalPLPercentage(totalPLPercentage);
-
         return response;
-        System.out.println("tanya");
     }
 }
-
