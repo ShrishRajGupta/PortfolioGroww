@@ -1,11 +1,12 @@
 package com.example.demo;
 
 import com.example.demo.controller.PopulateDatabaseController;
-import com.example.demo.entity.*;
+import com.example.demo.entity.Stock;
+import com.example.demo.entity.Trade;
+import com.example.demo.entity.UserAccount;
 import com.example.demo.repository.StockRepository;
 import com.example.demo.repository.TradeRepository;
 import com.example.demo.repository.UserAccountRepository;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
@@ -13,8 +14,10 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.http.ResponseEntity;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -38,9 +41,14 @@ class PopulateDatabaseControllerTests {
         MockitoAnnotations.openMocks(this);
     }
 
+    private static Stock stock(long i) {
+        return new Stock(i, "Stock" + i, new BigDecimal("100"), new BigDecimal("105"),
+                new BigDecimal("110"), new BigDecimal("95"), new BigDecimal("102.5"));
+    }
+
     @Test
-    void testPopulateUsers() {
-        when(userAccountRepository.save(any(UserAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    void populateUsers_addsAllWhenNoneExist() {
+        when(userAccountRepository.save(any(UserAccount.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ResponseEntity<String> response = populateDatabaseController.populateUsers();
 
@@ -49,57 +57,80 @@ class PopulateDatabaseControllerTests {
     }
 
     @Test
-    void testPopulateStocks() {
-        when(stockRepository.save(any(Stock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    void populateUsers_isIdempotent_skipsExistingEmails() {
+        when(userAccountRepository.findByEmail("user1@example.com"))
+                .thenReturn(Optional.of(new UserAccount(1L, "User1", "user1@example.com", null)));
+        when(userAccountRepository.findByEmail("user2@example.com"))
+                .thenReturn(Optional.of(new UserAccount(2L, "User2", "user2@example.com", null)));
+        when(userAccountRepository.save(any(UserAccount.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ResponseEntity<String> response = populateDatabaseController.populateUsers();
+
+        assertEquals("8 users added successfully (2 already existed).", response.getBody());
+        verify(userAccountRepository, times(8)).save(any(UserAccount.class));
+    }
+
+    @Test
+    void populateStocks_addsAllWithDecimalPrices() {
+        when(stockRepository.save(any(Stock.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ResponseEntity<String> response = populateDatabaseController.populateStocks();
 
         assertEquals("10 stocks added successfully.", response.getBody());
-        verify(stockRepository, times(10)).save(any(Stock.class));
+        verify(stockRepository, times(10)).save(argThat(s ->
+                s.getClosePrice() != null && s.getClosePrice().scale() == 4));
     }
 
     @Test
-    void testPopulateTrades() {
-        List<UserAccount> users = new ArrayList<>();
-        List<Stock> stocks = new ArrayList<>();
+    void populateStocks_isIdempotent_skipsExistingNames() {
+        when(stockRepository.findByName("Stock3")).thenReturn(List.of(stock(3)));
+        when(stockRepository.save(any(Stock.class))).thenAnswer(inv -> inv.getArgument(0));
 
+        ResponseEntity<String> response = populateDatabaseController.populateStocks();
+
+        assertEquals("9 stocks added successfully (1 already existed).", response.getBody());
+        verify(stockRepository, times(9)).save(any(Stock.class));
+    }
+
+    @Test
+    void populateTrades_oneTradePerUserStockPair() {
+        List<UserAccount> users = new ArrayList<>();
         for (int i = 1; i <= 2; i++) {
             users.add(new UserAccount((long) i, "User" + i, "user" + i + "@example.com", null));
         }
-
+        List<Stock> stocks = new ArrayList<>();
         for (int i = 1; i <= 5; i++) {
-            stocks.add(new Stock((long) i, "Stock" + i, 100.0 + i, 105.0 + i, 110.0 + i, 95.0 + i, 102.5 + i));
+            stocks.add(stock(i));
         }
-
         when(userAccountRepository.findAll()).thenReturn(users);
         when(stockRepository.findAll()).thenReturn(stocks);
-        when(tradeRepository.save(any(Trade.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tradeRepository.save(any(Trade.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ResponseEntity<String> response = populateDatabaseController.populateTrades();
 
         assertEquals("Trades with random data added for all users and stocks.", response.getBody());
-        verify(tradeRepository, times(users.size() * stocks.size())).save(any(Trade.class));
+        verify(tradeRepository, times(users.size() * stocks.size())).save(argThat(t ->
+                t.getTradeType() != null && t.getQuantity() > 0 && t.getPrice().scale() == 4));
     }
 
     @Test
-    void testRandomizeStockPrices() {
+    void randomizeStockPrices_keepsHighAboveCloseAboveLow() {
         List<Stock> stocks = new ArrayList<>();
-
         for (int i = 1; i <= 5; i++) {
-            stocks.add(new Stock((long) i, "Stock" + i, 100.0, 105.0, 110.0, 95.0, 102.5));
+            stocks.add(stock(i));
         }
-
         when(stockRepository.findAll()).thenReturn(stocks);
-        when(stockRepository.save(any(Stock.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(stockRepository.save(any(Stock.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ResponseEntity<String> response = populateDatabaseController.randomizeStockPrices();
 
         assertEquals("Stock prices randomized successfully.", response.getBody());
         verify(stockRepository, times(stocks.size())).save(any(Stock.class));
-
-        stocks.forEach(stock -> {
-            assertTrue(stock.getOpenPrice() >= 50.0 && stock.getOpenPrice() <= 150.0);
-            assertTrue(stock.getClosePrice() >= 50.0 && stock.getClosePrice() <= 150.0);
+        stocks.forEach(s -> {
+            assertTrue(s.getClosePrice().compareTo(new BigDecimal("50")) >= 0
+                    && s.getClosePrice().compareTo(new BigDecimal("150")) <= 0);
+            assertTrue(s.getHighPrice().compareTo(s.getClosePrice()) >= 0);
+            assertTrue(s.getLowPrice().compareTo(s.getClosePrice()) <= 0);
         });
     }
 }

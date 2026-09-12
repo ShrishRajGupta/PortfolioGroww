@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.UncheckedIOException;
@@ -115,13 +116,13 @@ public class StockServiceImpl implements StockService {
                 if (name.isEmpty()) {
                     continue;
                 }
-                double open, close, high, low, settlement;
+                BigDecimal open, close, high, low, settlement;
                 try {
-                    open = Double.parseDouble(record.get(1));
-                    close = Double.parseDouble(record.get(2));
-                    high = Double.parseDouble(record.get(3));
-                    low = Double.parseDouble(record.get(4));
-                    settlement = Double.parseDouble(record.get(5));
+                    open = new BigDecimal(record.get(1));
+                    close = new BigDecimal(record.get(2));
+                    high = new BigDecimal(record.get(3));
+                    low = new BigDecimal(record.get(4));
+                    settlement = new BigDecimal(record.get(5));
                 } catch (NumberFormatException e) {
                     // Most likely a header line.
                     log.debug("Skipping non-numeric CSV row {} ({})", record.getRecordNumber(), name);
