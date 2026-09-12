@@ -61,6 +61,11 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.NOT_FOUND, "Not found", ex.getMessage());
     }
 
+    @ExceptionHandler(InsufficientPositionException.class)
+    public ProblemDetail insufficientPosition(InsufficientPositionException ex) {
+        return problem(HttpStatus.CONFLICT, "Insufficient position", ex.getMessage());
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail conflict(DataIntegrityViolationException ex) {
         log.warn("Data integrity violation: {}", rootMessage(ex));

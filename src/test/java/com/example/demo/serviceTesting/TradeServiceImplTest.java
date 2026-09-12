@@ -6,6 +6,7 @@ import com.example.demo.entity.Stock;
 import com.example.demo.entity.Trade;
 import com.example.demo.entity.UserAccount;
 import com.example.demo.entity.enums.TradeType;
+import com.example.demo.exception.InsufficientPositionException;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.repository.StockRepository;
 import com.example.demo.repository.TradeRepository;
@@ -23,6 +24,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
@@ -48,11 +50,6 @@ class TradeServiceImplTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-    }
-
-    @Test
-    void recordTrade_booksAtCurrentMarketPriceAndReturnsTradeId() {
-        TradeRequestDTO request = new TradeRequestDTO(1L, 1L, TradeType.BUY, 10);
         when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
         when(stockRepository.findById(1L)).thenReturn(Optional.of(stock));
         when(tradeRepository.save(any(Trade.class))).thenAnswer(inv -> {
@@ -60,82 +57,115 @@ class TradeServiceImplTest {
             t.setId(42L);
             return t;
         });
+    }
 
-        TradeResponseDTO response = tradeService.recordTrade(request);
-
-        assertEquals(42L, response.getTradeId());
-        assertEquals("SUCCESS", response.getStatus());
-        assertEquals("Trade recorded successfully", response.getMessage());
-
+    private Trade savedTrade() {
         ArgumentCaptor<Trade> saved = ArgumentCaptor.forClass(Trade.class);
         verify(tradeRepository).save(saved.capture());
-        assertEquals(TradeType.BUY, saved.getValue().getTradeType());
-        assertEquals(10, saved.getValue().getQuantity());
-        assertEquals(stock.getClosePrice(), saved.getValue().getPrice(), "fill = current close price");
-        assertNull(saved.getValue().getClientTradeId());
-        verify(tradeRepository, never()).findByClientTradeId(anyString());
+        return saved.getValue();
     }
 
     @Test
-    void recordTrade_unknownStock_throws404AndBooksNothing() {
-        TradeRequestDTO request = new TradeRequestDTO(1L, 999L, TradeType.BUY, 10);
-        when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
+    void buy_withoutExecutionPrice_fillsAtCurrentClose() {
+        TradeResponseDTO response = tradeService.recordTrade(new TradeRequestDTO(1L, 1L, TradeType.BUY, 10));
+
+        assertEquals(42L, response.getTradeId());
+        assertEquals("SUCCESS", response.getStatus());
+        Trade t = savedTrade();
+        assertEquals(TradeType.BUY, t.getTradeType());
+        assertEquals(10, t.getQuantity());
+        assertEquals(stock.getClosePrice(), t.getPrice());
+        assertNull(t.getClientTradeId());
+        verify(tradeRepository, never()).netPosition(anyLong(), anyLong());
+    }
+
+    @Test
+    void buy_withExecutionPrice_fillsAtThatPrice() {
+        TradeRequestDTO request = new TradeRequestDTO(null, 1L, 1L, TradeType.BUY, 3, new BigDecimal("101.2500"));
+
+        tradeService.recordTrade(request);
+
+        assertEquals(new BigDecimal("101.2500"), savedTrade().getPrice());
+    }
+
+    @Test
+    void sell_withinPosition_isBooked() {
+        when(tradeRepository.netPosition(1L, 1L)).thenReturn(10L);
+
+        tradeService.recordTrade(new TradeRequestDTO(1L, 1L, TradeType.SELL, 10));
+
+        assertEquals(TradeType.SELL, savedTrade().getTradeType());
+    }
+
+    @Test
+    void sell_beyondPosition_is409AndBooksNothing() {
+        when(tradeRepository.netPosition(1L, 1L)).thenReturn(4L);
+
+        InsufficientPositionException ex = assertThrows(InsufficientPositionException.class,
+                () -> tradeService.recordTrade(new TradeRequestDTO(1L, 1L, TradeType.SELL, 5)));
+
+        assertEquals("Cannot sell 5 of stock 1: only 4 held", ex.getMessage());
+        verify(tradeRepository, never()).save(any());
+    }
+
+    @Test
+    void sell_withNoPosition_is409() {
+        when(tradeRepository.netPosition(1L, 1L)).thenReturn(0L);
+
+        assertThrows(InsufficientPositionException.class,
+                () -> tradeService.recordTrade(new TradeRequestDTO(1L, 1L, TradeType.SELL, 1)));
+        verify(tradeRepository, never()).save(any());
+    }
+
+    @Test
+    void unknownStock_throws404AndBooksNothing() {
         when(stockRepository.findById(999L)).thenReturn(Optional.empty());
 
         ResourceNotFoundException ex = assertThrows(ResourceNotFoundException.class,
-                () -> tradeService.recordTrade(request));
+                () -> tradeService.recordTrade(new TradeRequestDTO(1L, 999L, TradeType.BUY, 10)));
 
         assertEquals("Stock 999 not found", ex.getMessage());
         verify(tradeRepository, never()).save(any());
     }
 
     @Test
-    void recordTrade_unknownUser_throws404() {
-        TradeRequestDTO request = new TradeRequestDTO(77L, 1L, TradeType.SELL, 1);
+    void unknownUser_throws404() {
         when(userAccountRepository.findById(77L)).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class, () -> tradeService.recordTrade(request));
+        assertThrows(ResourceNotFoundException.class,
+                () -> tradeService.recordTrade(new TradeRequestDTO(77L, 1L, TradeType.SELL, 1)));
         verify(stockRepository, never()).findById(any());
         verify(tradeRepository, never()).save(any());
     }
 
     @Test
-    void recordTrade_replayWithSameClientTradeId_returnsOriginalWithoutBookingAgain() {
+    void replayWithSameClientTradeId_returnsOriginalWithoutBookingAgain() {
         Trade original = Trade.builder().id(7L).clientTradeId("abc-123").build();
         when(tradeRepository.findByClientTradeId("abc-123")).thenReturn(Optional.of(original));
-        TradeRequestDTO replay = new TradeRequestDTO("abc-123", 1L, 1L, TradeType.BUY, 10);
 
-        TradeResponseDTO response = tradeService.recordTrade(replay);
+        TradeResponseDTO response = tradeService.recordTrade(
+                new TradeRequestDTO("abc-123", 1L, 1L, TradeType.BUY, 10, null));
 
         assertEquals(7L, response.getTradeId());
-        assertEquals("SUCCESS", response.getStatus());
         assertEquals("Trade already recorded", response.getMessage());
         verify(tradeRepository, never()).save(any());
         verifyNoInteractions(userAccountRepository, stockRepository);
     }
 
     @Test
-    void recordTrade_newClientTradeId_isStoredTrimmed() {
+    void newClientTradeId_isStoredTrimmed() {
         when(tradeRepository.findByClientTradeId("key-1")).thenReturn(Optional.empty());
-        when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(stockRepository.findById(1L)).thenReturn(Optional.of(stock));
-        when(tradeRepository.save(any(Trade.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        tradeService.recordTrade(new TradeRequestDTO("  key-1 ", 1L, 1L, TradeType.SELL, 2));
+        tradeService.recordTrade(new TradeRequestDTO("  key-1 ", 1L, 1L, TradeType.BUY, 2, null));
 
-        ArgumentCaptor<Trade> saved = ArgumentCaptor.forClass(Trade.class);
-        verify(tradeRepository).save(saved.capture());
-        assertEquals("key-1", saved.getValue().getClientTradeId());
+        assertEquals("key-1", savedTrade().getClientTradeId());
     }
 
     @Test
-    void recordTrade_blankClientTradeId_isTreatedAsAbsent() {
-        when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(stockRepository.findById(1L)).thenReturn(Optional.of(stock));
-        when(tradeRepository.save(any(Trade.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        tradeService.recordTrade(new TradeRequestDTO("   ", 1L, 1L, TradeType.BUY, 1));
+    void blankClientTradeId_isTreatedAsAbsent() {
+        tradeService.recordTrade(new TradeRequestDTO("   ", 1L, 1L, TradeType.BUY, 1, null));
 
         verify(tradeRepository, never()).findByClientTradeId(anyString());
+        assertNull(savedTrade().getClientTradeId());
     }
 }

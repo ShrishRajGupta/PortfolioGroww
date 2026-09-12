@@ -5,6 +5,8 @@ import com.example.demo.dto.TradeResponseDTO;
 import com.example.demo.entity.Stock;
 import com.example.demo.entity.Trade;
 import com.example.demo.entity.UserAccount;
+import com.example.demo.entity.enums.TradeType;
+import com.example.demo.exception.InsufficientPositionException;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.repository.StockRepository;
 import com.example.demo.repository.TradeRepository;
@@ -15,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 
 @Service
@@ -28,11 +31,14 @@ public class TradeServiceImpl implements TradeService {
 
     /**
      * Books a trade in one transaction.
-     * <p>
-     * Idempotency: when the request carries a {@code clientTradeId} that was already booked, the
-     * original trade is returned instead of a second booking. A genuinely concurrent duplicate
-     * (two requests racing past the lookup) is stopped by the unique index and surfaces as a
-     * 409 Conflict via the global handler — the first caller's booking stands.
+     * <ul>
+     *   <li>Idempotency: a request whose {@code clientTradeId} was already booked returns the original
+     *       trade. A concurrent duplicate is stopped by the unique index and surfaces as 409.</li>
+     *   <li>Fill price: {@code executionPrice} when given, otherwise the stock's current close price.</li>
+     *   <li>SELL must not exceed the units currently held (409). The check reads the ledger inside the
+     *       same transaction; two SELLs racing each other can still both pass on MySQL's default
+     *       isolation — closing that gap is what the materialized, versioned position row is for.</li>
+     * </ul>
      */
     @Override
     @Transactional
@@ -52,13 +58,22 @@ public class TradeServiceImpl implements TradeService {
         Stock stock = stockRepository.findById(request.getStockId())
                 .orElseThrow(() -> new ResourceNotFoundException("Stock", request.getStockId()));
 
+        if (request.getTradeType() == TradeType.SELL) {
+            long held = tradeRepository.netPosition(userAccount.getId(), stock.getId());
+            if (request.getQuantity() > held) {
+                throw new InsufficientPositionException(stock.getId(), held, request.getQuantity());
+            }
+        }
+
+        BigDecimal fill = request.getExecutionPrice() != null ? request.getExecutionPrice() : stock.getClosePrice();
+
         Trade trade = Trade.builder()
                 .clientTradeId(clientTradeId)
                 .userAccount(userAccount)
                 .stock(stock)
                 .tradeType(request.getTradeType())
                 .quantity(request.getQuantity())
-                .price(stock.getClosePrice())   // filled at current market price
+                .price(fill)
                 .build();
 
         Trade saved = tradeRepository.save(trade);

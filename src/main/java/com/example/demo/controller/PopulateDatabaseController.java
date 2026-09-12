@@ -74,17 +74,21 @@ public class PopulateDatabaseController {
         return ResponseEntity.ok(seedMessage(added, 10, "stocks"));
     }
 
+    /**
+     * Writes a consistent ledger: every (user, stock) gets a BUY, and about half of them a later
+     * SELL of at most the bought quantity — never a SELL without a position, so the seeded data
+     * obeys the same rule the API enforces.
+     */
     @PostMapping("/trades")
     public ResponseEntity<String> populateTrades() {
+        ThreadLocalRandom rnd = ThreadLocalRandom.current();
         userAccountRepository.findAll().forEach(user ->
                 stockRepository.findAll().forEach(stock -> {
-                    Trade trade = new Trade();
-                    trade.setUserAccount(user);
-                    trade.setStock(stock);
-                    trade.setTradeType(ThreadLocalRandom.current().nextBoolean() ? TradeType.BUY : TradeType.SELL);
-                    trade.setQuantity(ThreadLocalRandom.current().nextInt(1, 101));
-                    trade.setPrice(money(ThreadLocalRandom.current().nextDouble(50.0, 150.0)));
-                    tradeRepository.save(trade);
+                    int bought = rnd.nextInt(10, 101);
+                    tradeRepository.save(trade(user, stock, TradeType.BUY, bought, rnd));
+                    if (rnd.nextBoolean()) {
+                        tradeRepository.save(trade(user, stock, TradeType.SELL, rnd.nextInt(1, bought + 1), rnd));
+                    }
                 }));
         return ResponseEntity.ok("Trades with random data added for all users and stocks.");
     }
@@ -101,6 +105,16 @@ public class PopulateDatabaseController {
             stockRepository.save(stock);
         });
         return ResponseEntity.ok("Stock prices randomized successfully.");
+    }
+
+    private static Trade trade(UserAccount user, Stock stock, TradeType type, int quantity, ThreadLocalRandom rnd) {
+        Trade trade = new Trade();
+        trade.setUserAccount(user);
+        trade.setStock(stock);
+        trade.setTradeType(type);
+        trade.setQuantity(quantity);
+        trade.setPrice(money(rnd.nextDouble(50.0, 150.0)));
+        return trade;
     }
 
     private static BigDecimal money(double value) {
