@@ -1,8 +1,11 @@
 package com.example.demo.web;
 
 import com.example.demo.controller.PortfolioController;
+import com.example.demo.dto.PortfolioHoldingDTO;
+import com.example.demo.dto.PortfolioResponseDTO;
 import com.example.demo.dto.TradeResponseDTO;
 import com.example.demo.entity.Stock;
+import com.example.demo.exception.InsufficientPositionException;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.service.PortfolioService;
 import com.example.demo.service.StockService;
@@ -16,6 +19,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 import static org.hamcrest.Matchers.containsString;
@@ -29,8 +33,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * HTTP contract of /api: request validation and the RFC 7807 error shape produced by
- * GlobalExceptionHandler. Services are mocked; this is a web slice, no database.
+ * HTTP contract of /api: request validation, response shapes and the RFC 7807 error shape produced
+ * by GlobalExceptionHandler. Services are mocked; this is a web slice, no database.
  */
 @WebMvcTest(PortfolioController.class)
 class PortfolioControllerWebTest {
@@ -63,6 +67,16 @@ class PortfolioControllerWebTest {
     }
 
     @Test
+    void recordTrade_withExecutionPrice_isAccepted() throws Exception {
+        when(tradeService.recordTrade(any())).thenReturn(new TradeResponseDTO(10L, "SUCCESS", "Trade recorded successfully"));
+
+        mvc.perform(post("/api/trade").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userAccountId\":1,\"stockId\":2,\"tradeType\":\"SELL\",\"quantity\":1,\"executionPrice\":101.2345}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tradeId").value(10));
+    }
+
+    @Test
     void recordTrade_missingFields_returns400ProblemWithFieldErrors() throws Exception {
         mvc.perform(post("/api/trade").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"tradeType\":\"BUY\"}"))
@@ -82,6 +96,21 @@ class PortfolioControllerWebTest {
                         .content("{\"userAccountId\":1,\"stockId\":2,\"tradeType\":\"SELL\",\"quantity\":0}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.quantity").value(containsString("greater than 0")));
+
+        verify(tradeService, never()).recordTrade(any());
+    }
+
+    @Test
+    void recordTrade_badExecutionPrice_returns400() throws Exception {
+        mvc.perform(post("/api/trade").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userAccountId\":1,\"stockId\":2,\"tradeType\":\"BUY\",\"quantity\":1,\"executionPrice\":-5}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.executionPrice").value(containsString("greater than 0")));
+
+        mvc.perform(post("/api/trade").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userAccountId\":1,\"stockId\":2,\"tradeType\":\"BUY\",\"quantity\":1,\"executionPrice\":1.123456}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.executionPrice").value(containsString("4 fraction")));
 
         verify(tradeService, never()).recordTrade(any());
     }
@@ -108,12 +137,47 @@ class PortfolioControllerWebTest {
     }
 
     @Test
+    void recordTrade_oversell_returns409InsufficientPosition() throws Exception {
+        when(tradeService.recordTrade(any())).thenThrow(new InsufficientPositionException(2L, 4, 5));
+
+        mvc.perform(post("/api/trade").contentType(MediaType.APPLICATION_JSON).content(VALID_TRADE))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Insufficient position"))
+                .andExpect(jsonPath("$.detail").value("Cannot sell 5 of stock 2: only 4 held"));
+    }
+
+    @Test
     void recordTrade_concurrentDuplicateKey_returns409() throws Exception {
         when(tradeService.recordTrade(any())).thenThrow(new DataIntegrityViolationException("uk_trades_client_trade_id"));
 
         mvc.perform(post("/api/trade").contentType(MediaType.APPLICATION_JSON).content(VALID_TRADE))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Conflict"));
+    }
+
+    @Test
+    void getPortfolio_serializesHoldingsAndTotals() throws Exception {
+        PortfolioHoldingDTO holding = PortfolioHoldingDTO.builder()
+                .stockId(1L).stockName("ACME").netQuantity(6)
+                .avgCost(new BigDecimal("100.0000")).marketPrice(new BigDecimal("120.0000"))
+                .costBasis(new BigDecimal("600.0000")).marketValue(new BigDecimal("720.0000"))
+                .unrealizedPnl(new BigDecimal("120.0000")).realizedPnl(new BigDecimal("120.0000"))
+                .build();
+        when(portfolioService.getPortfolio(1L)).thenReturn(PortfolioResponseDTO.builder()
+                .holdings(List.of(holding))
+                .totalMarketValue(new BigDecimal("720.0000")).totalCostBasis(new BigDecimal("600.0000"))
+                .totalUnrealizedPnl(new BigDecimal("120.0000")).totalRealizedPnl(new BigDecimal("120.0000"))
+                .totalPnl(new BigDecimal("240.0000")).unrealizedReturnPercentage(new BigDecimal("20.00"))
+                .build());
+
+        mvc.perform(get("/api/portfolio/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.holdings[0].stockName").value("ACME"))
+                .andExpect(jsonPath("$.holdings[0].netQuantity").value(6))
+                .andExpect(jsonPath("$.holdings[0].avgCost").value(100.0))
+                .andExpect(jsonPath("$.holdings[0].unrealizedPnl").value(120.0))
+                .andExpect(jsonPath("$.totalPnl").value(240.0))
+                .andExpect(jsonPath("$.unrealizedReturnPercentage").value(20.0));
     }
 
     @Test

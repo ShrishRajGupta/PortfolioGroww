@@ -4,11 +4,13 @@ import com.example.demo.controller.PopulateDatabaseController;
 import com.example.demo.entity.Stock;
 import com.example.demo.entity.Trade;
 import com.example.demo.entity.UserAccount;
+import com.example.demo.entity.enums.TradeType;
 import com.example.demo.repository.StockRepository;
 import com.example.demo.repository.TradeRepository;
 import com.example.demo.repository.UserAccountRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -16,7 +18,9 @@ import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -93,13 +97,13 @@ class PopulateDatabaseControllerTests {
     }
 
     @Test
-    void populateTrades_oneTradePerUserStockPair() {
+    void populateTrades_writesAConsistentLedger_buyBeforeAnySell() {
         List<UserAccount> users = new ArrayList<>();
-        for (int i = 1; i <= 2; i++) {
+        for (int i = 1; i <= 3; i++) {
             users.add(new UserAccount((long) i, "User" + i, "user" + i + "@example.com", null));
         }
         List<Stock> stocks = new ArrayList<>();
-        for (int i = 1; i <= 5; i++) {
+        for (int i = 1; i <= 6; i++) {
             stocks.add(stock(i));
         }
         when(userAccountRepository.findAll()).thenReturn(users);
@@ -109,8 +113,25 @@ class PopulateDatabaseControllerTests {
         ResponseEntity<String> response = populateDatabaseController.populateTrades();
 
         assertEquals("Trades with random data added for all users and stocks.", response.getBody());
-        verify(tradeRepository, times(users.size() * stocks.size())).save(argThat(t ->
-                t.getTradeType() != null && t.getQuantity() > 0 && t.getPrice().scale() == 4));
+        ArgumentCaptor<Trade> saved = ArgumentCaptor.forClass(Trade.class);
+        verify(tradeRepository, atLeast(users.size() * stocks.size())).save(saved.capture());
+        verify(tradeRepository, atMost(2 * users.size() * stocks.size())).save(any(Trade.class));
+
+        // per (user, stock): exactly one BUY, and any SELL is <= that BUY and comes after it
+        Map<String, Integer> bought = new HashMap<>();
+        for (Trade t : saved.getAllValues()) {
+            assertEquals(4, t.getPrice().scale());
+            assertTrue(t.getQuantity() > 0);
+            String key = t.getUserAccount().getId() + ":" + t.getStock().getId();
+            if (t.getTradeType() == TradeType.BUY) {
+                assertNull(bought.put(key, t.getQuantity()), "one BUY per pair: " + key);
+            } else {
+                Integer held = bought.get(key);
+                assertNotNull(held, "SELL without a prior BUY: " + key);
+                assertTrue(t.getQuantity() <= held, "SELL exceeds BUY: " + key);
+            }
+        }
+        assertEquals(users.size() * stocks.size(), bought.size());
     }
 
     @Test

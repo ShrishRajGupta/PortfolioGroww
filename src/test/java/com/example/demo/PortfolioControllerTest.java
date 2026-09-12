@@ -51,12 +51,15 @@ class PortfolioControllerTest {
 
     @Test
     void getPortfolio_returnsServiceResult() {
-        PortfolioResponseDTO mockResponse = new PortfolioResponseDTO();
-        mockResponse.setHoldings(Collections.emptyList());
-        mockResponse.setTotalHoldingValue(new BigDecimal("1000"));
-        mockResponse.setTotalBuyPrice(new BigDecimal("900"));
-        mockResponse.setTotalPL(new BigDecimal("100"));
-        mockResponse.setTotalPLPercentage(new BigDecimal("11.11"));
+        PortfolioResponseDTO mockResponse = PortfolioResponseDTO.builder()
+                .holdings(Collections.emptyList())
+                .totalMarketValue(new BigDecimal("1000.0000"))
+                .totalCostBasis(new BigDecimal("900.0000"))
+                .totalUnrealizedPnl(new BigDecimal("100.0000"))
+                .totalRealizedPnl(new BigDecimal("0.0000"))
+                .totalPnl(new BigDecimal("100.0000"))
+                .unrealizedReturnPercentage(new BigDecimal("11.11"))
+                .build();
         when(portfolioService.getPortfolio(1L)).thenReturn(mockResponse);
 
         ResponseEntity<PortfolioResponseDTO> response = portfolioController.getPortfolio(1L);
