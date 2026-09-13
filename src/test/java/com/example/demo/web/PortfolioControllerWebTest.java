@@ -29,6 +29,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -189,6 +190,49 @@ class PortfolioControllerWebTest {
                 .andExpect(jsonPath("$.holdings[0].unrealizedPnl").value(120.0))
                 .andExpect(jsonPath("$.totalPnl").value(240.0))
                 .andExpect(jsonPath("$.unrealizedReturnPercentage").value(20.0));
+    }
+
+    @Test
+    void searchStock_returnsMatches() throws Exception {
+        when(stockService.searchStockByName("Stock")).thenReturn(List.of(new Stock(1L, "Stock1",
+                new BigDecimal("100"), new BigDecimal("105"), new BigDecimal("110"), new BigDecimal("95"), new BigDecimal("102.5"))));
+
+        mvc.perform(get("/api/stocks/search").param("stock", "Stock"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("Stock1"));
+    }
+
+    @Test
+    void searchStock_rejectsEmpty_short_andInvalidCharacters_beforeHittingTheService() throws Exception {
+        mvc.perform(get("/api/stocks/search").param("stock", ""))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("Stock name must not be empty."));
+        mvc.perform(get("/api/stocks/search").param("stock", "S"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("Stock name must be at least 2 characters long."));
+        mvc.perform(get("/api/stocks/search").param("stock", "St@ck$"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("Stock name contains invalid characters. Only letters, numbers, and spaces are allowed."));
+
+        verify(stockService, never()).searchStockByName(any());
+    }
+
+    @Test
+    void searchStock_noMatch_returns404() throws Exception {
+        when(stockService.searchStockByName("Nothing")).thenReturn(List.of());
+
+        mvc.perform(get("/api/stocks/search").param("stock", "Nothing"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void unexpectedServiceFailure_returns500ProblemWithoutLeakingDetails() throws Exception {
+        when(portfolioService.getPortfolio(1L)).thenThrow(new IllegalStateException("db exploded: secret host"));
+
+        mvc.perform(get("/api/portfolio/1"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.title").value("Internal error"))
+                .andExpect(jsonPath("$.detail").value("An unexpected error occurred"));
     }
 
     @Test

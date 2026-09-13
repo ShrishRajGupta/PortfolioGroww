@@ -121,7 +121,7 @@ sequenceDiagram;
     kubectl apply -f k8s-deployment.yaml
     ```
    
-## Test Coverage
+## Test Coverage (historical)
 
 <img src="TestCoverage.png" width ="800px" title="Test coverage" alt="Jacoco page">
 
@@ -383,6 +383,21 @@ Create an [Issue](https://github.com/ShrishRajGupta/PortfolioGroww/issues).
 Leave a ⭐ If you think this project is cool.
 <p align="center"><img src="https://github.githubassets.com/images/mona-whisper.gif" alt="mona whisper" /></p>
 ---
+
+## Testing & Coverage
+
+`mvn verify` runs everything and **fails the build below 85 % line coverage** (Jacoco `check`; report in `target/site/jacoco`). Layers:
+
+| Layer | Examples | Needs |
+|---|---|---|
+| Unit (Mockito) | book arithmetic, trade/position/outbox services, relay, consumer, controllers | nothing |
+| Web slice (`@WebMvcTest`) | validation, RFC 7807 errors, response shapes, admin endpoints | nothing |
+| JPA slice (`@DataJpaTest`, H2) | fetch-join queries, `netPosition`, unique constraints, optimistic lock, outbox pending order | nothing |
+| Full context (`@SpringBootTest`, H2) | **concurrency**: parallel trades on one position, oversell race, insert race | nothing |
+| Embedded Kafka | outbox → relay → consumer loop, redelivery dedup | nothing (in-process broker) |
+| **Docker** (`Testcontainers`, `mysql:8.0`) | fresh-database provisioning: `V1…V4` including the Java migrations, `CHECK`/`UNIQUE` behaviour, full trade lifecycle on real MySQL | Docker — **skipped automatically where it is absent**, runs in CI |
+
+Flyway's Java migrations are excluded from the coverage figure because only the Docker-backed suite can execute them.
 
 ## Configuration & Schema
 
