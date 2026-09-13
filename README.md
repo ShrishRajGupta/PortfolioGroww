@@ -286,6 +286,28 @@ Valued straight from the trade ledger in one query, using a weighted-average-cos
 ```
 ---
 
+### 9. Reconcile positions
+**Endpoint:** `POST /api/admin/positions/reconcile[?userId=1]` _(dev profile only)_
+
+Rebuilds the materialized `positions` rows from the trade ledger — for one user, or for everyone when `userId` is omitted. Safe to run any time; the ledger is the source of truth.
+
+**Response:**
+```json
+{ "usersRebuilt": 10, "positionsWritten": 47 }
+```
+
+### 10. Position drift report
+**Endpoint:** `GET /api/admin/positions/drift?userId=1` _(dev profile only)_
+
+Compares what the ledger implies with what `positions` stores. An empty array means no drift.
+
+**Response:**
+```json
+[ { "stockId": 2, "ledgerNetQuantity": 6, "storedNetQuantity": 5, "ledgerAvgCost": 103.24964444, "storedAvgCost": 103.24964444 } ]
+```
+
+---
+
 ## Repository Classes
 
 ### UserAccountRepository
@@ -368,6 +390,13 @@ Leave a ⭐ If you think this project is cool.
 - **Environment:** `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE` (or `MYSQL_DB`), `MYSQL_USER`, `MYSQL_PASSWORD`, `KAFKA_BOOTSTRAP_SERVERS` (defaults `localhost:9092`), `STOCK_SHEET_URL`, `STOCK_PRICE_CRON`. No host addresses are hardcoded in the app.
 - **Schema migrations:** the database schema is owned by [Flyway](https://flywaydb.org) — versioned SQL lives in `src/main/resources/db/migration` (`V1__baseline.sql` onward) and Hibernate runs in `validate` mode. Databases created earlier by `ddl-auto=update` are adopted automatically (`baseline-on-migrate`).
 - **Stock prices:** refreshed daily (`STOCK_PRICE_CRON`) from the published sheet, or on demand via `POST /api/stocks/update` (CSV upload). Rows are upserted by stock name.
+
+## Positions & Concurrency
+
+- **Ledger + materialized positions.** `trades` is append-only and is the source of truth. `positions` holds one row per (user, stock) — `net_quantity`, weighted-average `avg_cost`, cumulative `realized_pnl` — and is updated **in the same transaction** as the trade insert. `GET /api/portfolio/{userId}` reads positions (one query, O(holdings)) instead of replaying the ledger.
+- **Concurrency.** Position rows carry a `version` (optimistic locking). Two trades that touch the same position at once make the loser's transaction fail and **retry** (`TRADE_MAX_ATTEMPTS`, `TRADE_RETRY_BACKOFF_MS`); a SELL therefore can never oversell, even under a race. When retries are exhausted the API answers `409 Concurrent update` — nothing is booked, the client retries. The alternative — `SELECT … FOR UPDATE` — serializes every trade on a position and was rejected in favour of optimistic locking, which costs nothing when there is no contention.
+- **Backfill & repair.** Migration `V3.1` (Java) builds `positions` from the existing ledger on first deploy; `V3.2` (Java) retires the ledger index the new composite index supersedes. `POST /api/admin/positions/reconcile` rebuilds them at any time and `GET /api/admin/positions/drift` reports discrepancies (dev profile).
+- **Why no price cache.** The current price is a column on the `stock` row that the position query already joins, so a cache would add staleness without saving a round-trip. It becomes worthwhile only when prices move to an external feed.
 
 ## Contact
 For any issues, feel free to reach out via email at `shrishrg@gmail.com` or create an issue in the repository.

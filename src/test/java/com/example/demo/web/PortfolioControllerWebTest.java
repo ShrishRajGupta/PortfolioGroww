@@ -147,6 +147,17 @@ class PortfolioControllerWebTest {
     }
 
     @Test
+    void recordTrade_retryBudgetExhausted_returns409ConcurrentUpdate() throws Exception {
+        when(tradeService.recordTrade(any())).thenThrow(new com.example.demo.exception.ConcurrentTradeException(5,
+                new org.springframework.orm.ObjectOptimisticLockingFailureException("Position", 1L)));
+
+        mvc.perform(post("/api/trade").contentType(MediaType.APPLICATION_JSON).content(VALID_TRADE))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Concurrent update"))
+                .andExpect(jsonPath("$.detail").value(containsString("after 5 attempts")));
+    }
+
+    @Test
     void recordTrade_concurrentDuplicateKey_returns409() throws Exception {
         when(tradeService.recordTrade(any())).thenThrow(new DataIntegrityViolationException("uk_trades_client_trade_id"));
 

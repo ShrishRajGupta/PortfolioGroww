@@ -66,6 +66,12 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.CONFLICT, "Insufficient position", ex.getMessage());
     }
 
+    @ExceptionHandler(ConcurrentTradeException.class)
+    public ProblemDetail concurrentUpdate(ConcurrentTradeException ex) {
+        log.warn("Retry budget exhausted: {}", ex.getMessage());
+        return problem(HttpStatus.CONFLICT, "Concurrent update", ex.getMessage());
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail conflict(DataIntegrityViolationException ex) {
         log.warn("Data integrity violation: {}", rootMessage(ex));
