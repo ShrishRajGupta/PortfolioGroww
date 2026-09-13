@@ -10,6 +10,7 @@ import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.repository.StockRepository;
 import com.example.demo.repository.TradeRepository;
 import com.example.demo.repository.UserAccountRepository;
+import com.example.demo.service.OutboxService;
 import com.example.demo.service.PositionService;
 import com.example.demo.service.TradeService;
 import lombok.extern.slf4j.Slf4j;
@@ -24,9 +25,10 @@ import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Books trades. Each attempt is one transaction that appends the trade to the ledger and applies it
- * to the materialized position; the position row's optimistic lock makes concurrent trades on the
- * same position collide, and the loser retries with a short backoff.
+ * Books trades. Each attempt is one transaction that appends the trade to the ledger, applies it to
+ * the materialized position and records a TradeExecuted outbox event — all three commit together or
+ * not at all (Kafka itself is never touched inside the transaction). The position row's optimistic
+ * lock makes concurrent trades on the same position collide, and the loser retries with backoff.
  * <p>
  * Retried: transient failures (optimistic-lock, deadlock, lock timeout) and the integrity violation
  * two first-ever trades raise when both try to create the same position row. A duplicate
@@ -43,6 +45,7 @@ public class TradeServiceImpl implements TradeService {
     private final StockRepository stockRepository;
     private final UserAccountRepository userAccountRepository;
     private final PositionService positionService;
+    private final OutboxService outboxService;
     private final TransactionOperations transaction;
     private final int maxAttempts;
     private final long retryBackoffMs;
@@ -51,6 +54,7 @@ public class TradeServiceImpl implements TradeService {
                             StockRepository stockRepository,
                             UserAccountRepository userAccountRepository,
                             PositionService positionService,
+                            OutboxService outboxService,
                             TransactionOperations transaction,
                             @Value("${app.trade.max-attempts:5}") int maxAttempts,
                             @Value("${app.trade.retry-backoff-ms:20}") long retryBackoffMs) {
@@ -58,6 +62,7 @@ public class TradeServiceImpl implements TradeService {
         this.stockRepository = stockRepository;
         this.userAccountRepository = userAccountRepository;
         this.positionService = positionService;
+        this.outboxService = outboxService;
         this.transaction = transaction;
         this.maxAttempts = Math.max(1, maxAttempts);
         this.retryBackoffMs = Math.max(0, retryBackoffMs);
@@ -87,7 +92,7 @@ public class TradeServiceImpl implements TradeService {
         }
     }
 
-    /** One transactional attempt: idempotency check, validation, position update, ledger append. */
+    /** One transactional attempt: idempotency check, validation, position update, ledger append, outbox event. */
     private TradeResponseDTO book(TradeRequestDTO request, String clientTradeId) {
         if (clientTradeId != null) {
             Optional<Trade> existing = tradeRepository.findByClientTradeId(clientTradeId);
@@ -114,6 +119,9 @@ public class TradeServiceImpl implements TradeService {
                 .quantity(request.getQuantity())
                 .price(fill)
                 .build());
+
+        outboxService.recordTradeExecuted(saved);
+
         return new TradeResponseDTO(saved.getId(), "SUCCESS", "Trade recorded successfully");
     }
 

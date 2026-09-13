@@ -387,9 +387,17 @@ Leave a ⭐ If you think this project is cool.
 ## Configuration & Schema
 
 - **Profiles:** `dev` is the default for local runs (SQL logging on, `/api/populate/*` seed endpoints enabled). Deployments set `SPRING_PROFILES_ACTIVE=prod`.
-- **Environment:** `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE` (or `MYSQL_DB`), `MYSQL_USER`, `MYSQL_PASSWORD`, `KAFKA_BOOTSTRAP_SERVERS` (defaults `localhost:9092`), `STOCK_SHEET_URL`, `STOCK_PRICE_CRON`. No host addresses are hardcoded in the app.
+- **Environment:** `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE` (or `MYSQL_DB`), `MYSQL_USER`, `MYSQL_PASSWORD`, `KAFKA_BOOTSTRAP_SERVERS` (defaults `localhost:9092`), `KAFKA_TOPIC_TRADE_EXECUTED`, `KAFKA_CONSUMER_ENABLED`, `KAFKA_PRODUCER_MAX_BLOCK_MS`, `OUTBOX_RELAY_ENABLED`, `TRADE_MAX_ATTEMPTS`, `STOCK_SHEET_URL`, `STOCK_PRICE_CRON`. No host addresses are hardcoded in the app.
 - **Schema migrations:** the database schema is owned by [Flyway](https://flywaydb.org) — versioned SQL lives in `src/main/resources/db/migration` (`V1__baseline.sql` onward) and Hibernate runs in `validate` mode. Databases created earlier by `ddl-auto=update` are adopted automatically (`baseline-on-migrate`).
 - **Stock prices:** refreshed daily (`STOCK_PRICE_CRON`) from the published sheet, or on demand via `POST /api/stocks/update` (CSV upload). Rows are upserted by stock name.
+
+## Events (Kafka, transactional outbox)
+
+- **No dual write.** Booking a trade writes the trade, the position update **and an `outbox_event` row** in one database transaction. Nothing is sent to Kafka inside that transaction, so a broker outage can never make a trade fail or half-happen.
+- **Relay.** `OutboxRelay` polls `outbox_event` (`OUTBOX_POLL_MS`, batches of `OUTBOX_BATCH_SIZE`), publishes each pending row to `KAFKA_TOPIC_TRADE_EXECUTED` (default `trade-executed`) keyed by `userAccountId` — so a user's events stay ordered — waits for the broker's ack (`acks=all`), then stamps `published_at`. A failed send records `attempts`/`last_error` and stops the batch so order is preserved; the next poll retries.
+- **At-least-once.** A crash between "sent" and "marked published" republishes the event. Every message carries an `eventId` header (UUID, unique in `outbox_event`); consumers deduplicate on it. `TradeExecutedConsumer` does exactly that (in memory — a production consumer would persist processed ids alongside its side effect).
+- **Switches.** `OUTBOX_RELAY_ENABLED` (default `true`; the **dev profile defaults it to `false`** because there is usually no broker locally) and `KAFKA_CONSUMER_ENABLED` (default `false`). Turn both on with docker-compose's Kafka to see the full loop; without a broker, outbox rows simply accumulate and are published once a relay runs.
+- **Payload** (`TradeExecuted`): `eventId, tradeId, clientTradeId, userAccountId, stockId, tradeType, quantity, price, occurredAt`.
 
 ## Positions & Concurrency
 

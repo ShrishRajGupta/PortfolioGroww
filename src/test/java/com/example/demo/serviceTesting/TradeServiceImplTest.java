@@ -2,6 +2,7 @@ package com.example.demo.serviceTesting;
 
 import com.example.demo.dto.TradeRequestDTO;
 import com.example.demo.dto.TradeResponseDTO;
+import com.example.demo.entity.OutboxEvent;
 import com.example.demo.entity.Position;
 import com.example.demo.entity.Stock;
 import com.example.demo.entity.Trade;
@@ -14,6 +15,7 @@ import com.example.demo.repository.StockRepository;
 import com.example.demo.repository.TradeRepository;
 import com.example.demo.repository.UserAccountRepository;
 import com.example.demo.service.Impl.TradeServiceImpl;
+import com.example.demo.service.OutboxService;
 import com.example.demo.service.PositionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,6 +48,8 @@ class TradeServiceImplTest {
     private UserAccountRepository userAccountRepository;
     @Mock
     private PositionService positionService;
+    @Mock
+    private OutboxService outboxService;
 
     private TradeServiceImpl tradeService;
 
@@ -59,10 +63,11 @@ class TradeServiceImplTest {
         MockitoAnnotations.openMocks(this);
         // Real "no transaction" implementation: attempts run inline, exceptions propagate unchanged.
         tradeService = new TradeServiceImpl(tradeRepository, stockRepository, userAccountRepository,
-                positionService, TransactionOperations.withoutTransaction(), MAX_ATTEMPTS, 0);
+                positionService, outboxService, TransactionOperations.withoutTransaction(), MAX_ATTEMPTS, 0);
         when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
         when(stockRepository.findById(1L)).thenReturn(Optional.of(stock));
         when(positionService.applyTrade(any(), any(), any(), anyInt(), any())).thenReturn(new Position());
+        when(outboxService.recordTradeExecuted(any(Trade.class))).thenReturn(new OutboxEvent());
         when(tradeRepository.save(any(Trade.class))).thenAnswer(inv -> {
             Trade t = inv.getArgument(0);
             t.setId(42L);
@@ -77,7 +82,7 @@ class TradeServiceImplTest {
     }
 
     @Test
-    void buy_appliesToPositionThenAppendsLedger_atCurrentClose() {
+    void buy_appliesToPosition_appendsLedger_recordsOutboxEvent() {
         TradeResponseDTO response = tradeService.recordTrade(new TradeRequestDTO(1L, 1L, TradeType.BUY, 10));
 
         assertEquals(42L, response.getTradeId());
@@ -87,6 +92,7 @@ class TradeServiceImplTest {
         assertEquals(TradeType.BUY, t.getTradeType());
         assertEquals(stock.getClosePrice(), t.getPrice());
         assertNull(t.getClientTradeId());
+        verify(outboxService).recordTradeExecuted(same(t));
     }
 
     @Test
@@ -98,7 +104,7 @@ class TradeServiceImplTest {
     }
 
     @Test
-    void oversell_fromPositionService_propagatesAndBooksNothing() {
+    void oversell_fromPositionService_propagates_booksNothing_emitsNothing() {
         when(positionService.applyTrade(any(), any(), eq(TradeType.SELL), anyInt(), any()))
                 .thenThrow(new InsufficientPositionException(1L, 4, 5));
 
@@ -106,6 +112,7 @@ class TradeServiceImplTest {
                 () -> tradeService.recordTrade(new TradeRequestDTO(1L, 1L, TradeType.SELL, 5)));
 
         verify(tradeRepository, never()).save(any());
+        verifyNoInteractions(outboxService);
     }
 
     @Test
@@ -116,7 +123,7 @@ class TradeServiceImplTest {
                 () -> tradeService.recordTrade(new TradeRequestDTO(1L, 999L, TradeType.BUY, 10)));
 
         assertEquals("Stock 999 not found", ex.getMessage());
-        verifyNoInteractions(positionService);
+        verifyNoInteractions(positionService, outboxService);
         verify(tradeRepository, never()).save(any());
     }
 
@@ -126,11 +133,11 @@ class TradeServiceImplTest {
 
         assertThrows(ResourceNotFoundException.class,
                 () -> tradeService.recordTrade(new TradeRequestDTO(77L, 1L, TradeType.SELL, 1)));
-        verifyNoInteractions(positionService);
+        verifyNoInteractions(positionService, outboxService);
     }
 
     @Test
-    void replayWithSameClientTradeId_returnsOriginalWithoutBookingAgain() {
+    void replayWithSameClientTradeId_returnsOriginal_withoutBookingOrEmitting() {
         Trade original = Trade.builder().id(7L).clientTradeId("abc-123").build();
         when(tradeRepository.findByClientTradeId("abc-123")).thenReturn(Optional.of(original));
 
@@ -140,11 +147,11 @@ class TradeServiceImplTest {
         assertEquals(7L, response.getTradeId());
         assertEquals("Trade already recorded", response.getMessage());
         verify(tradeRepository, never()).save(any());
-        verifyNoInteractions(positionService, userAccountRepository, stockRepository);
+        verifyNoInteractions(positionService, outboxService, userAccountRepository, stockRepository);
     }
 
     @Test
-    void optimisticLockCollision_isRetried_thenSucceeds() {
+    void optimisticLockCollision_isRetried_thenSucceeds_emittingOnce() {
         when(positionService.applyTrade(any(), any(), any(), anyInt(), any()))
                 .thenThrow(new ObjectOptimisticLockingFailureException(Position.class, 1L))
                 .thenThrow(new ObjectOptimisticLockingFailureException(Position.class, 1L))
@@ -155,6 +162,7 @@ class TradeServiceImplTest {
         assertEquals(42L, response.getTradeId());
         verify(positionService, times(3)).applyTrade(any(), any(), any(), anyInt(), any());
         verify(tradeRepository, times(1)).save(any(Trade.class));
+        verify(outboxService, times(1)).recordTradeExecuted(any(Trade.class));
     }
 
     @Test
@@ -169,6 +177,7 @@ class TradeServiceImplTest {
         assertInstanceOf(ObjectOptimisticLockingFailureException.class, ex.getCause());
         verify(positionService, times(MAX_ATTEMPTS)).applyTrade(any(), any(), any(), anyInt(), any());
         verify(tradeRepository, never()).save(any());
+        verifyNoInteractions(outboxService);
     }
 
     @Test
@@ -185,7 +194,6 @@ class TradeServiceImplTest {
 
     @Test
     void duplicateClientTradeIdRace_resolvesAsReplayOfTheWinner() {
-        // first lookup: nothing yet; the insert then collides with the winner; second lookup finds it
         Trade winner = Trade.builder().id(9L).clientTradeId("race-1").build();
         when(tradeRepository.findByClientTradeId("race-1"))
                 .thenReturn(Optional.empty())
@@ -198,7 +206,7 @@ class TradeServiceImplTest {
 
         assertEquals(9L, response.getTradeId());
         assertEquals("Trade already recorded", response.getMessage());
-        verify(positionService, times(1)).applyTrade(any(), any(), any(), anyInt(), any());
+        verifyNoInteractions(outboxService);
     }
 
     @Test

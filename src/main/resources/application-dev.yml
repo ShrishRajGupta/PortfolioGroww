@@ -4,6 +4,12 @@ spring:
     properties:
       hibernate.format_sql: true
 
+app:
+  outbox:
+    # No broker on a typical dev machine: outbox rows accumulate and are published once a relay runs.
+    # Set OUTBOX_RELAY_ENABLED=true (and start docker-compose's Kafka) to exercise publishing locally.
+    relay-enabled: ${OUTBOX_RELAY_ENABLED:false}
+
 logging:
   level:
     org.hibernate.SQL: debug
