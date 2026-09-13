@@ -3,12 +3,18 @@ package com.example.demo.controller;
 import com.example.demo.entity.*;
 import com.example.demo.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.IntStream;
 
+/**
+ * Seed/randomize helpers for local development and demos.
+ * Dev-profile only: these mutate the database and must never ship to production.
+ */
+@Profile("dev")
 @RestController
 @RequestMapping("/api/populate")
 public class PopulateDatabaseController {
@@ -22,7 +28,7 @@ public class PopulateDatabaseController {
     @Autowired
     private TradeRepository tradeRepository;
 
-    @GetMapping("/users")
+    @PostMapping("/users")
     public ResponseEntity<String> populateUsers() {
         IntStream.rangeClosed(1, 10).forEach(i -> {
             UserAccount user = new UserAccount();
@@ -33,7 +39,7 @@ public class PopulateDatabaseController {
         return ResponseEntity.ok("10 users added successfully.");
     }
 
-    @GetMapping("/stocks")
+    @PostMapping("/stocks")
     public ResponseEntity<String> populateStocks() {
         IntStream.rangeClosed(1, 10).forEach(i -> {
             Stock stock = new Stock();
@@ -48,7 +54,7 @@ public class PopulateDatabaseController {
         return ResponseEntity.ok("10 stocks added successfully.");
     }
 
-    @GetMapping("/trades")
+    @PostMapping("/trades")
     public ResponseEntity<String> populateTrades() {
         userAccountRepository.findAll().forEach(user -> {
             stockRepository.findAll().forEach(stock -> {
@@ -77,4 +83,3 @@ public class PopulateDatabaseController {
         return ResponseEntity.ok("Stock prices randomized successfully.");
     }
 }
-

@@ -8,11 +8,11 @@ import java.util.Optional;
 
 public interface StockService {
 
+    /** Fetches the configured stock sheet and upserts every row by stock name. */
     void downloadAndProcessStockFile();
 
-    void processCsv(MultipartFile file);
-
-    void updateStocksFromCsv(MultipartFile file);
+    /** Upserts stocks (by name) from an uploaded CSV. Returns the number of rows applied. */
+    int processCsv(MultipartFile file);
 
     List<Stock> searchStockByName(String name);
 

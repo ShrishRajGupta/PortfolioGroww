@@ -5,19 +5,12 @@ ADD target/demo-application.jar demo-application.jar
 
 EXPOSE 8080
 
-# Using MySQL 8 as per docker-compose
-ENV MYSQL_ROOT_PASSWORD=rootpassword \
+# Defaults match docker-compose.yaml; override per environment.
+# (Only the application's own settings belong here - broker/server env vars do not.)
+ENV MYSQL_HOST=host.docker.internal \
     MYSQL_DATABASE=mydb \
-    MYSQL_USER=user\
-    MYSQL_PASSWORD=userpassword\
-    MYSQL_HOST=host.docker.internal
-
-# Kafka Service Configuration
-# Ensures Kafka is reachable by the application
-ENV KAFKA_BROKER_ID=1 \
-    KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181 \
-    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT \
-    KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://172.16.97.42:9092 \
-    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+    MYSQL_USER=user \
+    MYSQL_PASSWORD=userpassword \
+    KAFKA_BOOTSTRAP_SERVERS=kafka:9092
 
 ENTRYPOINT ["java", "-jar", "demo-application.jar"]
