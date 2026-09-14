@@ -1,53 +1,152 @@
-
 package com.example.demo.service.Impl;
 
-import com.example.demo.dto.*;
-import com.example.demo.entity.*;
-        import com.example.demo.repository.*;
+import com.example.demo.dto.TradeRequestDTO;
+import com.example.demo.dto.TradeResponseDTO;
+import com.example.demo.entity.Stock;
+import com.example.demo.entity.Trade;
+import com.example.demo.entity.UserAccount;
+import com.example.demo.exception.ConcurrentTradeException;
+import com.example.demo.exception.ResourceNotFoundException;
+import com.example.demo.repository.StockRepository;
+import com.example.demo.repository.TradeRepository;
+import com.example.demo.repository.UserAccountRepository;
+import com.example.demo.service.OutboxService;
+import com.example.demo.service.PositionService;
 import com.example.demo.service.TradeService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
-import java.util.Optional;
+import org.springframework.transaction.support.TransactionOperations;
 
+import java.math.BigDecimal;
+import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
+
+/**
+ * Books trades. Each attempt is one transaction that appends the trade to the ledger, applies it to
+ * the materialized position and records a TradeExecuted outbox event — all three commit together or
+ * not at all (Kafka itself is never touched inside the transaction). The position row's optimistic
+ * lock makes concurrent trades on the same position collide, and the loser retries with backoff.
+ * <p>
+ * Retried: transient failures (optimistic-lock, deadlock, lock timeout) and the integrity violation
+ * two first-ever trades raise when both try to create the same position row. A duplicate
+ * {@code clientTradeId} that loses the race is resolved as an idempotent replay of the winner.
+ * <p>
+ * Trade-off: optimistic locking costs nothing without contention and never holds row locks across
+ * the request; {@code SELECT ... FOR UPDATE} would serialize every trade on a position instead.
+ */
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class TradeServiceImpl implements TradeService {
 
-    @Autowired
     private final TradeRepository tradeRepository;
-
-    @Autowired
     private final StockRepository stockRepository;
-
-    @Autowired
     private final UserAccountRepository userAccountRepository;
+    private final PositionService positionService;
+    private final OutboxService outboxService;
+    private final TransactionOperations transaction;
+    private final int maxAttempts;
+    private final long retryBackoffMs;
+
+    public TradeServiceImpl(TradeRepository tradeRepository,
+                            StockRepository stockRepository,
+                            UserAccountRepository userAccountRepository,
+                            PositionService positionService,
+                            OutboxService outboxService,
+                            TransactionOperations transaction,
+                            @Value("${app.trade.max-attempts:5}") int maxAttempts,
+                            @Value("${app.trade.retry-backoff-ms:20}") long retryBackoffMs) {
+        this.tradeRepository = tradeRepository;
+        this.stockRepository = stockRepository;
+        this.userAccountRepository = userAccountRepository;
+        this.positionService = positionService;
+        this.outboxService = outboxService;
+        this.transaction = transaction;
+        this.maxAttempts = Math.max(1, maxAttempts);
+        this.retryBackoffMs = Math.max(0, retryBackoffMs);
+    }
 
     @Override
-    public TradeResponseDTO recordTrade(TradeRequestDTO tradeRequest) {
-        Optional<UserAccount> userAccount = userAccountRepository.findById(tradeRequest.getUserAccountId());
-        Optional<Stock> stock = stockRepository.findById(tradeRequest.getStockId());
+    public TradeResponseDTO recordTrade(TradeRequestDTO request) {
+        String clientTradeId = normalizeKey(request.getClientTradeId());
 
-        if (userAccount.isPresent() && stock.isPresent()) {
-            Trade trade = new Trade();
-            trade.setUserAccount(userAccount.get());
-            trade.setStock(stock.get());
-            trade.setTradeType(tradeRequest.getTradeType());
-            trade.setQuantity(tradeRequest.getQuantity());
-            trade.setPrice(stock.get().getClosePrice());
-            tradeRepository.save(trade);
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return transaction.execute(status -> book(request, clientTradeId));
+            } catch (TransientDataAccessException | DataIntegrityViolationException e) {
+                if (clientTradeId != null) {
+                    Optional<Trade> winner = tradeRepository.findByClientTradeId(clientTradeId);
+                    if (winner.isPresent()) {
+                        log.info("clientTradeId={} lost a race; replaying trade {}", clientTradeId, winner.get().getId());
+                        return replay(winner.get());
+                    }
+                }
+                if (attempt >= maxAttempts) {
+                    throw new ConcurrentTradeException(attempt, e);
+                }
+                log.debug("Attempt {}/{} collided ({}); retrying", attempt, maxAttempts, e.getClass().getSimpleName());
+                backoff(attempt);
+            }
+        }
+    }
 
-            TradeResponseDTO response = new TradeResponseDTO();
-            response.setStatus("SUCCESS");
-            response.setMessage("Trade recorded successfully");
-            return response;
+    /** One transactional attempt: idempotency check, validation, position update, ledger append, outbox event. */
+    private TradeResponseDTO book(TradeRequestDTO request, String clientTradeId) {
+        if (clientTradeId != null) {
+            Optional<Trade> existing = tradeRepository.findByClientTradeId(clientTradeId);
+            if (existing.isPresent()) {
+                log.info("Idempotent replay of clientTradeId={} -> trade {}", clientTradeId, existing.get().getId());
+                return replay(existing.get());
+            }
         }
 
-        TradeResponseDTO response = new TradeResponseDTO();
-        response.setStatus("FAILURE");
-        response.setMessage("Invalid user or stock ID");
-        return response;
+        UserAccount userAccount = userAccountRepository.findById(request.getUserAccountId())
+                .orElseThrow(() -> new ResourceNotFoundException("User account", request.getUserAccountId()));
+        Stock stock = stockRepository.findById(request.getStockId())
+                .orElseThrow(() -> new ResourceNotFoundException("Stock", request.getStockId()));
+
+        BigDecimal fill = request.getExecutionPrice() != null ? request.getExecutionPrice() : stock.getClosePrice();
+
+        positionService.applyTrade(userAccount, stock, request.getTradeType(), request.getQuantity(), fill);
+
+        Trade saved = tradeRepository.save(Trade.builder()
+                .clientTradeId(clientTradeId)
+                .userAccount(userAccount)
+                .stock(stock)
+                .tradeType(request.getTradeType())
+                .quantity(request.getQuantity())
+                .price(fill)
+                .build());
+
+        outboxService.recordTradeExecuted(saved);
+
+        return new TradeResponseDTO(saved.getId(), "SUCCESS", "Trade recorded successfully");
+    }
+
+    private static TradeResponseDTO replay(Trade original) {
+        return new TradeResponseDTO(original.getId(), "SUCCESS", "Trade already recorded");
+    }
+
+    private void backoff(int attempt) {
+        if (retryBackoffMs == 0) {
+            return;
+        }
+        long jitter = ThreadLocalRandom.current().nextLong(retryBackoffMs + 1);
+        try {
+            Thread.sleep(retryBackoffMs * attempt + jitter);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new ConcurrentTradeException(attempt, ie);
+        }
+    }
+
+    private static String normalizeKey(String key) {
+        if (key == null) {
+            return null;
+        }
+        String trimmed = key.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }
