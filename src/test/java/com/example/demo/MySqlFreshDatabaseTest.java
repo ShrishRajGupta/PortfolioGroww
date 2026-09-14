@@ -19,6 +19,7 @@ import com.example.demo.service.TradeService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -28,6 +29,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -108,15 +110,46 @@ class MySqlFreshDatabaseTest {
                 .highPrice(bd("1")).lowPrice(bd("1")).settlementPrice(bd("1")).build());
 
         String insert = "INSERT INTO trades (user_account_id, stock_id, trade_type, quantity, price) VALUES (?, ?, ?, ?, ?)";
-        assertThrows(DataIntegrityViolationException.class,
-                () -> jdbc.update(insert, user.getId(), stock.getId(), "HOLD", 1, bd("1")), "CHECK trade_type");
-        assertThrows(DataIntegrityViolationException.class,
-                () -> jdbc.update(insert, user.getId(), stock.getId(), "BUY", 0, bd("1")), "CHECK quantity > 0");
-        assertThrows(DataIntegrityViolationException.class,
-                () -> jdbc.update("INSERT INTO user_account (name, email) VALUES (?, ?)", "Dup", "con@example.com"), "UNIQUE email");
-        assertThrows(DataIntegrityViolationException.class,
+        assertCheckConstraintViolated("ck_trades_trade_type",
+                () -> jdbc.update(insert, user.getId(), stock.getId(), "HOLD", 1, bd("1")));
+        assertCheckConstraintViolated("ck_trades_quantity_positive",
+                () -> jdbc.update(insert, user.getId(), stock.getId(), "BUY", 0, bd("1")));
+        assertCheckConstraintViolated("ck_positions_net_quantity_non_negative",
                 () -> jdbc.update("INSERT INTO positions (user_account_id, stock_id, net_quantity, avg_cost, realized_pnl) VALUES (?, ?, ?, ?, ?)",
-                        user.getId(), stock.getId(), -1, bd("1"), bd("0")), "CHECK net_quantity >= 0");
+                        user.getId(), stock.getId(), -1, bd("1"), bd("0")));
+
+        // UNIQUE is different: the app relies on Spring translating it (idempotent replay, position insert race),
+        // so here the Spring type is part of the contract.
+        DataIntegrityViolationException duplicate = assertThrows(DataIntegrityViolationException.class,
+                () -> jdbc.update("INSERT INTO user_account (name, email) VALUES (?, ?)", "Dup", "con@example.com"), "UNIQUE email");
+        assertEquals(ER_DUP_ENTRY, mysqlErrorCode(duplicate));
+    }
+
+    /** MySQL 8 ER_CHECK_CONSTRAINT_VIOLATED. */
+    private static final int ER_CHECK_CONSTRAINT_VIOLATED = 3819;
+    /** MySQL ER_DUP_ENTRY. */
+    private static final int ER_DUP_ENTRY = 1062;
+
+    /**
+     * Asserts that MySQL itself rejected the statement for the named CHECK constraint.
+     * <p>
+     * Deliberately NOT {@code assertThrows(DataIntegrityViolationException.class, ...)}: MySQL reports a CHECK
+     * violation with SQLSTATE HY000 and vendor code 3819, and Spring's MySQL error-code table
+     * ({@code sql-error-codes.xml}, still true on spring-framework main) does not list 3819, so Spring surfaces it
+     * as {@link org.springframework.jdbc.UncategorizedSQLException}. Asserting on the vendor code and constraint
+     * name tests what this method is for (the database enforces the rule) independent of that translation gap.
+     */
+    private static void assertCheckConstraintViolated(String constraint, Runnable statement) {
+        DataAccessException ex = assertThrows(DataAccessException.class, statement::run, "CHECK " + constraint);
+        assertEquals(ER_CHECK_CONSTRAINT_VIOLATED, mysqlErrorCode(ex), "CHECK " + constraint + ": " + ex.getMessage());
+        assertTrue(ex.getMostSpecificCause().getMessage().contains("'" + constraint + "'"),
+                "expected MySQL to name '" + constraint + "' but got: " + ex.getMostSpecificCause().getMessage());
+    }
+
+    private static int mysqlErrorCode(DataAccessException ex) {
+        Throwable root = ex.getMostSpecificCause();
+        assertInstanceOf(SQLException.class, root, "root cause should be the driver's SQLException");
+        return ((SQLException) root).getErrorCode();
     }
 
     @Test
