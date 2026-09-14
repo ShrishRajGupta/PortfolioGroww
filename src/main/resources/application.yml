@@ -34,22 +34,40 @@ spring:
   kafka:
     # Accept the compose/k8s variable name as well as the conventional one.
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:${KAFKA_ADVERTISED_LISTENERS:localhost:9092}}
+    producer:
+      # Outbox payloads are already JSON text; the relay publishes them as-is.
+      acks: all
+      properties:
+        # send() blocks on metadata for this long when the broker is unreachable; keep it short so a
+        # down broker costs the relay seconds per tick, not the 60s client default.
+        max.block.ms: ${KAFKA_PRODUCER_MAX_BLOCK_MS:5000}
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.type.mapping: "createTransactionRequest:com.example.demo.dto.TradeRequestDTO"
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      properties:
-        spring.json.type.mapping: "createTransactionRequest:com.example.demo.dto.TradeRequestDTO"
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
 
 app:
   kafka:
-    # The trade consumer is not part of the write path yet (see outbox work); keep it from
-    # hammering a broker that usually isn't running locally. Flip on when a broker is present.
+    # The TradeExecuted consumer is a downstream subscriber; keep it off where no broker runs.
     consumer-enabled: ${KAFKA_CONSUMER_ENABLED:false}
+    consumer-group: ${KAFKA_CONSUMER_GROUP:portfolio-events}
+    topics:
+      trade-executed: ${KAFKA_TOPIC_TRADE_EXECUTED:trade-executed}
+    topic-partitions: ${KAFKA_TOPIC_PARTITIONS:3}
+    topic-replicas: ${KAFKA_TOPIC_REPLICAS:1}
+  outbox:
+    # Trades write an outbox row in their own transaction; the relay publishes pending rows to Kafka.
+    # Delivery is at-least-once; consumers deduplicate on eventId. The dev profile turns the relay off.
+    relay-enabled: ${OUTBOX_RELAY_ENABLED:true}
+    poll-ms: ${OUTBOX_POLL_MS:1000}
+    batch-size: ${OUTBOX_BATCH_SIZE:100}
+    send-timeout-ms: ${OUTBOX_SEND_TIMEOUT_MS:5000}
+  trade:
+    # Positions are updated with optimistic locking; concurrent trades on the same position retry.
+    max-attempts: ${TRADE_MAX_ATTEMPTS:5}
+    retry-backoff-ms: ${TRADE_RETRY_BACKOFF_MS:20}
   # Published Google Sheet (CSV) that feeds the scheduled stock-price refresh.
   stock-sheet-url: ${STOCK_SHEET_URL:https://docs.google.com/spreadsheets/d/e/2PACX-1vTVvpOPIz0e1k3fAbExvEpo2XMGmVkhXPkUxnIEr4BVQayT2--uuxoqhc6yKBd7S_WG4SQOdJLEboqs/pub?gid=49957058&single=true&output=csv}
   # Daily at 01:00.

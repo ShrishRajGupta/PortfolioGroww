@@ -3,16 +3,19 @@ package com.example.demo.repository;
 import com.example.demo.entity.UserAccount;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-import java.util.Optional;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+/**
+ * NOTE: this class mocks the repository it is named after, so it only exercises the entity.
+ * Real @DataJpaTest coverage arrives with the Testcontainers work.
+ */
 class UserAccountRepositoryTest {
 
     @Mock
@@ -25,17 +28,16 @@ class UserAccountRepositoryTest {
 
     @Test
     void testSaveUserAccount() {
-        // Arrange
         UserAccount userAccount = new UserAccount();
         userAccount.setName("John Doe");
         userAccount.setEmail("john.doe@example.com");
+        // created_at is set by @CreationTimestamp on persist; a mock does not persist.
+        userAccount.setCreatedAt(LocalDateTime.now());
 
         when(userAccountRepository.save(userAccount)).thenReturn(userAccount);
 
-        // Act
         UserAccount savedAccount = userAccountRepository.save(userAccount);
 
-        // Assert
         assertEquals("John Doe", savedAccount.getName());
         assertEquals("john.doe@example.com", savedAccount.getEmail());
         assertNotNull(savedAccount.getCreatedAt());
@@ -43,58 +45,43 @@ class UserAccountRepositoryTest {
 
     @Test
     void testFindById() {
-        // Arrange
-        Long userId = 1L;
         UserAccount mockUserAccount = new UserAccount();
-        mockUserAccount.setId(userId);
+        mockUserAccount.setId(1L);
         mockUserAccount.setName("Jane Doe");
         mockUserAccount.setEmail("jane.doe@example.com");
 
-        when(userAccountRepository.findById(userId)).thenReturn(Optional.of(mockUserAccount));
+        when(userAccountRepository.findById(1L)).thenReturn(Optional.of(mockUserAccount));
 
-        // Act
-        Optional<UserAccount> result = userAccountRepository.findById(userId);
+        Optional<UserAccount> result = userAccountRepository.findById(1L);
 
-        // Assert
         assertTrue(result.isPresent());
-        assertEquals(userId, result.get().getId());
+        assertEquals(1L, result.get().getId());
         assertEquals("Jane Doe", result.get().getName());
         assertEquals("jane.doe@example.com", result.get().getEmail());
     }
 
-
-
     @Test
     void testFindByEmail() {
-        // Arrange
-        String testEmail = "test@example.com";
         UserAccount mockUserAccount = new UserAccount();
         mockUserAccount.setId(1L);
-        mockUserAccount.setEmail(testEmail);
+        mockUserAccount.setEmail("test@example.com");
         mockUserAccount.setName("Test User");
 
-        when(userAccountRepository.findByEmail(testEmail)).thenReturn(Optional.of(mockUserAccount));
+        when(userAccountRepository.findByEmail("test@example.com")).thenReturn(Optional.of(mockUserAccount));
 
-        // Act
-        Optional<UserAccount> result = userAccountRepository.findByEmail(testEmail);
+        Optional<UserAccount> result = userAccountRepository.findByEmail("test@example.com");
 
-        // Assert
         assertTrue(result.isPresent());
-        assertEquals(testEmail, result.get().getEmail());
+        assertEquals("test@example.com", result.get().getEmail());
         assertEquals("Test User", result.get().getName());
     }
 
     @Test
     void testDeleteById() {
-        // Arrange
-        Long userId = 1L;
-        doNothing().when(userAccountRepository).deleteById(userId);
+        doNothing().when(userAccountRepository).deleteById(1L);
 
-        // Act
-        userAccountRepository.deleteById(userId);
+        userAccountRepository.deleteById(1L);
 
-        // Assert
-        verify(userAccountRepository, times(1)).deleteById(userId);
+        verify(userAccountRepository, times(1)).deleteById(1L);
     }
-
 }
