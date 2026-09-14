@@ -132,52 +132,76 @@ sequenceDiagram;
 ### 1. Record Trade
 **Endpoint:** `POST /api/trade`
 
-**Description:** Records a trade for a user and stock.
+Books a trade on the ledger. A `SELL` must not exceed the units currently held.
 
 **Request Body:**
 ```json
 {
+  "clientTradeId": "3f9c2a1e-6d0b-4c9f-9e1a-2b7d8c4f5a10",
   "userAccountId": 1,
-  "stockId": 5,
+  "stockId": 2,
   "tradeType": "BUY",
-  "quantity": 10
+  "quantity": 10,
+  "executionPrice": 101.25
 }
 ```
 
-**Response:**
+| Field | Notes |
+|---|---|
+| `clientTradeId` | optional idempotency key (≤ 36 chars). Replaying the same key returns the original trade instead of booking again |
+| `tradeType` | `BUY` or `SELL` |
+| `quantity` | integer > 0 |
+| `executionPrice` | optional fill price per unit (≤ 4 decimals). Defaults to the stock's current close price |
+
+**Response `200`:**
 ```json
-{
-  "status": "SUCCESS",
-  "message": "Trade recorded successfully."
-}
+{ "tradeId": 12, "status": "SUCCESS", "message": "Trade recorded successfully" }
 ```
+A replay returns the same `tradeId` with `"message": "Trade already recorded"`.
+
+**Errors** are RFC 7807 problem details (`application/problem+json`): `400` validation (per-field `errors` map) or malformed input, `404` unknown user or stock, `409` insufficient position (`SELL` beyond what is held) or duplicate key.
 
 ---
 
 ### 2. Get Portfolio
 **Endpoint:** `GET /api/portfolio/{userId}`
 
-**Description:** Retrieves the portfolio details for a specific user.
+Valued straight from the trade ledger in one query, using a weighted-average-cost book per stock: each `BUY` re-weights the average cost, each `SELL` realizes `(fill − avgCost) × quantity` and leaves the average cost of the remaining units unchanged. Open positions are listed; realized P&L of fully closed positions stays in the totals. Money has 4 decimals, percentages 2 — never `NaN`.
 
 **Response:**
 ```json
 {
   "holdings": [
     {
-      "stockName": "Stock1",
       "stockId": 1,
-      "quantity": 10,
-      "buyPrice": 100.0,
-      "currentPrice": 105.0,
-      "gainLoss": 50.0
+      "stockName": "ACME",
+      "netQuantity": 6,
+      "avgCost": 100.0000,
+      "marketPrice": 120.0000,
+      "costBasis": 600.0000,
+      "marketValue": 720.0000,
+      "unrealizedPnl": 120.0000,
+      "realizedPnl": 120.0000
     }
   ],
-  "totalHoldingValue": 1050.0,
-  "totalBuyPrice": 1000.0,
-  "totalPL": 50.0,
-  "totalPLPercentage": 5.0
+  "totalMarketValue": 720.0000,
+  "totalCostBasis": 600.0000,
+  "totalUnrealizedPnl": 120.0000,
+  "totalRealizedPnl": 120.0000,
+  "totalPnl": 240.0000,
+  "unrealizedReturnPercentage": 20.00
 }
 ```
+
+| Field | Meaning |
+|---|---|
+| `netQuantity` | units held = BUY − SELL quantity |
+| `avgCost` | weighted-average cost per unit of the units still held |
+| `costBasis` / `marketValue` | `avgCost × netQuantity` / `marketPrice × netQuantity` |
+| `unrealizedPnl` | `marketValue − costBasis` |
+| `realizedPnl` | locked in by SELLs so far |
+| `totalPnl` | `totalUnrealizedPnl + totalRealizedPnl` |
+| `unrealizedReturnPercentage` | `totalUnrealizedPnl / totalCostBasis × 100`; `0.00` when nothing is held |
 
 ---
 
@@ -262,6 +286,28 @@ sequenceDiagram;
 ```
 ---
 
+### 9. Reconcile positions
+**Endpoint:** `POST /api/admin/positions/reconcile[?userId=1]` _(dev profile only)_
+
+Rebuilds the materialized `positions` rows from the trade ledger — for one user, or for everyone when `userId` is omitted. Safe to run any time; the ledger is the source of truth.
+
+**Response:**
+```json
+{ "usersRebuilt": 10, "positionsWritten": 47 }
+```
+
+### 10. Position drift report
+**Endpoint:** `GET /api/admin/positions/drift?userId=1` _(dev profile only)_
+
+Compares what the ledger implies with what `positions` stores. An empty array means no drift.
+
+**Response:**
+```json
+[ { "stockId": 2, "ledgerNetQuantity": 6, "storedNetQuantity": 5, "ledgerAvgCost": 103.24964444, "storedAvgCost": 103.24964444 } ]
+```
+
+---
+
 ## Repository Classes
 
 ### UserAccountRepository
@@ -344,6 +390,13 @@ Leave a ⭐ If you think this project is cool.
 - **Environment:** `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE` (or `MYSQL_DB`), `MYSQL_USER`, `MYSQL_PASSWORD`, `KAFKA_BOOTSTRAP_SERVERS` (defaults `localhost:9092`), `STOCK_SHEET_URL`, `STOCK_PRICE_CRON`. No host addresses are hardcoded in the app.
 - **Schema migrations:** the database schema is owned by [Flyway](https://flywaydb.org) — versioned SQL lives in `src/main/resources/db/migration` (`V1__baseline.sql` onward) and Hibernate runs in `validate` mode. Databases created earlier by `ddl-auto=update` are adopted automatically (`baseline-on-migrate`).
 - **Stock prices:** refreshed daily (`STOCK_PRICE_CRON`) from the published sheet, or on demand via `POST /api/stocks/update` (CSV upload). Rows are upserted by stock name.
+
+## Positions & Concurrency
+
+- **Ledger + materialized positions.** `trades` is append-only and is the source of truth. `positions` holds one row per (user, stock) — `net_quantity`, weighted-average `avg_cost`, cumulative `realized_pnl` — and is updated **in the same transaction** as the trade insert. `GET /api/portfolio/{userId}` reads positions (one query, O(holdings)) instead of replaying the ledger.
+- **Concurrency.** Position rows carry a `version` (optimistic locking). Two trades that touch the same position at once make the loser's transaction fail and **retry** (`TRADE_MAX_ATTEMPTS`, `TRADE_RETRY_BACKOFF_MS`); a SELL therefore can never oversell, even under a race. When retries are exhausted the API answers `409 Concurrent update` — nothing is booked, the client retries. The alternative — `SELECT … FOR UPDATE` — serializes every trade on a position and was rejected in favour of optimistic locking, which costs nothing when there is no contention.
+- **Backfill & repair.** Migration `V3.1` (Java) builds `positions` from the existing ledger on first deploy; `V3.2` (Java) retires the ledger index the new composite index supersedes. `POST /api/admin/positions/reconcile` rebuilds them at any time and `GET /api/admin/positions/drift` reports discrepancies (dev profile).
+- **Why no price cache.** The current price is a column on the `stock` row that the position query already joins, so a cache would add staleness without saving a round-trip. It becomes worthwhile only when prices move to an external feed.
 
 ## Contact
 For any issues, feel free to reach out via email at `shrishrg@gmail.com` or create an issue in the repository.

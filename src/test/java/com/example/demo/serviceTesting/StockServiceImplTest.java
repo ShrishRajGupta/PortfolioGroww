@@ -10,6 +10,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.mock.web.MockMultipartFile;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -36,6 +37,11 @@ class StockServiceImplTest {
         return new MockMultipartFile("file", "stocks.csv", "text/csv", body.getBytes());
     }
 
+    private static Stock stock1(String close) {
+        return new Stock(1L, "Stock1", new BigDecimal("100"), new BigDecimal(close),
+                new BigDecimal("110"), new BigDecimal("95"), new BigDecimal("102.5"));
+    }
+
     @SuppressWarnings("unchecked")
     private List<Stock> capturedBatch() {
         ArgumentCaptor<List<Stock>> captor = ArgumentCaptor.forClass(List.class);
@@ -44,7 +50,7 @@ class StockServiceImplTest {
     }
 
     @Test
-    void processCsv_insertsNewStocksInOneBatch() {
+    void processCsv_insertsNewStocksInOneBatch_withExactDecimals() {
         when(stockRepository.findByName(anyString())).thenReturn(List.of());
 
         int applied = stockService.processCsv(csv("Stock1,100,105,110,95,102.5\nStock2,200,205,210,195,202.5"));
@@ -53,14 +59,16 @@ class StockServiceImplTest {
         List<Stock> batch = capturedBatch();
         assertEquals(2, batch.size());
         assertEquals("Stock1", batch.get(0).getName());
-        assertEquals(105.0, batch.get(0).getClosePrice());
+        assertEquals(new BigDecimal("105"), batch.get(0).getClosePrice());
+        assertEquals(new BigDecimal("102.5"), batch.get(0).getSettlementPrice(), "no float rounding");
         assertEquals("Stock2", batch.get(1).getName());
         assertNull(batch.get(0).getId(), "new stock must not carry an id");
     }
 
     @Test
     void processCsv_updatesExistingStockByNameInsteadOfDuplicating() {
-        Stock existing = new Stock(7L, "Stock1", 1.0, 1.0, 1.0, 1.0, 1.0);
+        Stock existing = new Stock(7L, "Stock1", new BigDecimal("1"), new BigDecimal("1"),
+                new BigDecimal("1"), new BigDecimal("1"), new BigDecimal("1"));
         when(stockRepository.findByName("Stock1")).thenReturn(List.of(existing));
 
         int applied = stockService.processCsv(csv("Stock1,100,105,110,95,102.5"));
@@ -69,8 +77,8 @@ class StockServiceImplTest {
         List<Stock> batch = capturedBatch();
         assertSame(existing, batch.get(0), "existing row is updated, not replaced");
         assertEquals(7L, batch.get(0).getId());
-        assertEquals(105.0, batch.get(0).getClosePrice());
-        assertEquals(95.0, batch.get(0).getLowPrice());
+        assertEquals(new BigDecimal("105"), batch.get(0).getClosePrice());
+        assertEquals(new BigDecimal("95"), batch.get(0).getLowPrice());
     }
 
     @Test
@@ -87,13 +95,13 @@ class StockServiceImplTest {
         assertEquals(2, applied);
         List<Stock> batch = capturedBatch();
         assertEquals(List.of("Stock1", "Stock2"), batch.stream().map(Stock::getName).toList());
-        assertEquals(200.0, batch.get(1).getOpenPrice());
+        assertEquals(new BigDecimal("200"), batch.get(1).getOpenPrice());
     }
 
     @Test
     void searchStockByName_delegatesTrimmedQuery() {
         List<Stock> mockStocks = new ArrayList<>();
-        mockStocks.add(new Stock(1L, "Stock1", 100.0, 105.0, 110.0, 95.0, 102.5));
+        mockStocks.add(stock1("105"));
         when(stockRepository.findByNameContainingIgnoreCase("Stock")).thenReturn(mockStocks);
 
         List<Stock> stocks = stockService.searchStockByName("  Stock ");
@@ -105,8 +113,7 @@ class StockServiceImplTest {
 
     @Test
     void findStockById_delegates() {
-        Stock mockStock = new Stock(1L, "Stock1", 100.0, 105.0, 110.0, 95.0, 102.5);
-        when(stockRepository.findById(1L)).thenReturn(Optional.of(mockStock));
+        when(stockRepository.findById(1L)).thenReturn(Optional.of(stock1("105")));
 
         Optional<Stock> stock = stockService.findStockById(1L);
 

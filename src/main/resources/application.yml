@@ -50,6 +50,10 @@ app:
     # The trade consumer is not part of the write path yet (see outbox work); keep it from
     # hammering a broker that usually isn't running locally. Flip on when a broker is present.
     consumer-enabled: ${KAFKA_CONSUMER_ENABLED:false}
+  trade:
+    # Positions are updated with optimistic locking; concurrent trades on the same position retry.
+    max-attempts: ${TRADE_MAX_ATTEMPTS:5}
+    retry-backoff-ms: ${TRADE_RETRY_BACKOFF_MS:20}
   # Published Google Sheet (CSV) that feeds the scheduled stock-price refresh.
   stock-sheet-url: ${STOCK_SHEET_URL:https://docs.google.com/spreadsheets/d/e/2PACX-1vTVvpOPIz0e1k3fAbExvEpo2XMGmVkhXPkUxnIEr4BVQayT2--uuxoqhc6yKBd7S_WG4SQOdJLEboqs/pub?gid=49957058&single=true&output=csv}
   # Daily at 01:00.
